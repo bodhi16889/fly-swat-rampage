@@ -171,6 +171,21 @@ def main() -> int:
               renamed["name"] == "Adan" and renamed["shown"] == "Adan"
               and '"Adan"' in (renamed["stored"] or ""), str(renamed))
 
+        scenes = page.evaluate("Array.from({length:100}, (_, i) => {"
+                               " const n = i + 1, s = __game.sceneSpec(n);"
+                               " return {n, chapter: s.chapter, name: s.name, en: s.name_en,"
+                               " key: s.key, hash: __game.sceneHash(n)}; })")
+        names = {s["name"] for s in scenes}
+        ens = {s["en"] for s in scenes}
+        keys = {s["key"] for s in scenes}
+        hashes = {s["hash"] for s in scenes}
+        per_chapter = {c: sum(1 for s in scenes if s["chapter"] == c) for c in range(1, 6)}
+        check("100 關場景：每關都有獨立名稱與場景 key",
+              len(scenes) == 100 and len(names) == 100 and len(ens) == 100 and len(keys) == 100
+              and all(v == 20 for v in per_chapter.values()), f"{len(names)}/{len(keys)} {per_chapter}")
+        check("100 關場景：像素指紋全部不同（不是同一張換色）",
+              len(hashes) == 100, f"unique={len(hashes)}")
+
         page.click(".lvcell[data-level='1']")
         time.sleep(0.4)
         st = page.evaluate("({phase: __game.state.phase, level: __game.state.level, target: __game.LEVELS[1].goal.target, flies: __game.flies.length})")
@@ -904,7 +919,7 @@ def main() -> int:
     if FAILS:
         print(f"RESULT: FAIL ({len(FAILS)}: {', '.join(FAILS)})")
         return 1
-    print("RESULT: PASS (100 關 / 20 武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / 本機 PB / 全球榜 / GamePix SDK / 手機 / 640×480)")
+    print("RESULT: PASS (100 關 / 100 場景 / 20 武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / 本機 PB / 全球榜 / GamePix SDK / 手機 / 640×480)")
     return 0
 
 

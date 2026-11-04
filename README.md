@@ -1,10 +1,10 @@
-# 打擊蒼蠅大作戰 · Fly Swat Rampage — **V5（20 武器 · 100 關 · 無盡模式）**
+# 打擊蒼蠅大作戰 · Fly Swat Rampage — **V5（20 武器 · 100 關 · 100 場景 · 無盡模式）**
 
 手機 H5 單指觸控打蒼蠅遊戲。**單一 `index.html`、零依賴、Canvas 2D + Web Audio 合成音效 + SAPI 人聲**，
-直向滿版（`viewport-fit=cover` + `touch-action: none`），手機瀏覽器打開就能玩。
+直向滿版（`viewport-fit=cover` + `touch-action: none`）；100 關各自有獨立場景、配色與主視覺，手機瀏覽器打開就能玩。
 
 > 🌐 線上版：<https://bodhi16889.github.io/fly-swat-rampage/>
-> 🎮 GamePix 上架包：`dist/fly-swat-rampage-gamepix.zip`（ZIP 根目錄即 `index.html`，約 140 KB）；
+> 🎮 GamePix 上架包：`dist/fly-swat-rampage-gamepix.zip`（ZIP 根目錄即 `index.html`，約 157 KB）；
 > 素材在 `gamepix/assets/`；填表文案與合規自查見 [`GAMEPIX_SUBMISSION.md`](GAMEPIX_SUBMISSION.md)。
 > 另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)
 
@@ -76,6 +76,22 @@
 - 每 10 關（10, 20, …, 100）是 Boss 關；第 100 關為最終蠅王。
 - 通關第 100 關解鎖無盡模式（容錯 20、每 60 秒迷你王、本機 top 5）。
 
+## 場景（100 關＝100 個獨立場景）
+
+每一關都有自己的場景名稱、主視覺、配色、時間（白天／黃昏／夜晚／雨天／霓虹）與雜物組合；不是同一張背景換色。
+
+| 章 | 場景數 | 例子 |
+| --: | --: | :--- |
+| 1 夏日客廳 | 20 | 晨光西瓜茶几、午後電視時光、魚缸旁的窗、貓咪的跳台、蠅王巢穴 |
+| 2 傳統菜市場 | 20 | 水果攤晨市、魚攤冰塊、肉攤紅燈、麵攤熱氣、燈籠巷 |
+| 3 麵包店櫥窗 | 20 | 可頌櫥窗、草莓蛋糕櫃、咖啡機、婚禮蛋糕、蠅王烤爐 |
+| 4 露營野餐墊 | 20 | 雙人帳篷、營火、湖邊營地、吊床、營火蠅王 |
+| 5 後巷廚餘桶 | 20 | 廚餘桶、霓虹招牌、塗鴉牆、防火梯、蠅王王座 |
+
+- 100 關縮圖總覽：[`gamepix/scene-sheet.png`](gamepix/scene-sheet.png)。
+- 場景由 `sceneSpec(n)` 產生：`key`、中英文名、focal prop、配色、時間、雜物；`sceneHash(n)` 可驗證 100 張都不一樣。
+- 背景第一次進關時畫到離屏 canvas，之後每帧只 `drawImage`；雨、螢火蟲、蒸氣等動態層才每帧更新。
+
 ## 音效與人聲
 
 - 分層音效：`swing` → `hit` → `kill`（60ms 限流）→ `bossDown`。
@@ -103,7 +119,7 @@ python3 verify_smoke.py --headed           # 想看畫面
 python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（96 項檢查）：
+覆蓋範圍（98 項檢查）：
 
 - 版面 / 主循環 / 暖機後 fps
 - 選單：100 關、5 章 × 20 格、20 武器、四種目標型別、無盡未解鎖
@@ -119,6 +135,7 @@ python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage
 - 本機排行：章節 20 關列表、單關前 5、同裝置多暱稱
 - 語言切換：英文介面按 🌐 切中文、存 localStorage、重載生效
 - 全球榜：100 關型別與後端一致、預設關閉、上傳/名次、排序與自己標記、復活分榜、章節 20 關、訪客不可上傳、API 失敗 fallback
+- 場景：100 個獨立名稱／key、5 章各 20、100 張像素指紋全不同
 - GamePix SDK：manual lifecycle、pause/resume、插頁廣告時機、關卡復活＋無盡續命、無 SDK 退路
 - 語系：英文預設、`zh` 中文
 - 640×480 iframe、Pixel 5 直向、20 武器列
@@ -159,7 +176,7 @@ RESULT: PASS
 | 5b | 選用全球榜（`LB_URL`／`LB_ENABLED_DEFAULT`、`?lb=on|off`、`sendScore`、全球章節／單關前 50）；後端在 `server/` |
 | 6 | `attack()` 模式分派：tap／fan／hold／holdFan／trap／laser／wave／decoy／magnet／rocket／drone／screen → `damageFly` |
 | 7 | 粒子與特效（環、電弧、扇形、文字、閃光） |
-| 8 | 5 種程序化場景（每章共用） |
+| 8 | 100 個程序化場景（`sceneSpec`／`sceneFor`／`sceneHash`；每關獨立 focal＋配色＋雜物，離屏快取） |
 | 9 | 蒼蠅繪製（蜜蜂、金斑偽裝、Boss 護盾／Phase 2） |
 | 10 | `update()`：生成、突風、毒霧、陷阱、波、誘餌、火箭、無人機、護盾、目標判定 |
 | 11 | HUD、章節選單（暱稱／改名／語言切換／5×20 格）、本機排行（章節＋單關前 5）、全球排行（章節＋前 50）、結算（PB／全球名次／復活／續命） |
@@ -175,7 +192,7 @@ waves / decoys / rockets / drones / effects / weapon / progress / board / frame 
 ```bash
 python3 build_gamepix.py        # dist/fly-swat-rampage-gamepix.zip（根目錄只有 index.html）
 python3 gamepix/make_assets.py  # icon 512 / cover 1920×1080 / 5 張 1080×1920 截圖（另產 1 張封面主視覺）
-python3 verify_smoke.py         # 96 項
+python3 verify_smoke.py         # 98 項
 ```
 
 SDK：`GamePixConfig = { lifecycle:'manual' }`、`loading→loaded→gameStart`、`pause/resume`（停時鐘＋音訊）、

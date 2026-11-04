@@ -93,17 +93,18 @@ def main() -> int:
         shot(page, SHOTS / "00-hero.png", 0.25)
         page.evaluate("__game.gp.resume('shot')")
 
-        # 02 第 2 關：電蚊拍連鎖（先觸發特效再凍結畫面截圖）
+        # 02 第 21 關：水果攤場景＋電蚊拍連鎖（先觸發特效再凍結畫面截圖）
         page.evaluate("""(() => {
-          __game.startLevel(2, true);          // 重設成新局：1800 分解鎖電蚊拍
+          __game.startLevel(21, true);         // 重設成新局：1800 分解鎖電蚊拍
           __game.addScore(1800 - __game.state.score);
           __game.state.weaponIndex = 3;
-          __game.startLevel(2);
+          __game.startLevel(21);
           const cx = innerWidth / 2, cy = innerHeight * 0.45;
           for (let i = 0; i < 5; i++) __game.spawnFly(cx + (i - 2) * 54, cy + (i % 2) * 36);
           __game.state.cool = 0;
           __game.attack(cx, cy);
           __game.gp.pause('shot');
+          document.getElementById('toast').classList.remove('show');
         })()""")
         page.wait_for_function("getComputedStyle(document.getElementById('modal')).opacity === '0'", timeout=5_000)
         shot(page, SHOTS / "02-action.png", 0.25)
@@ -123,6 +124,8 @@ def main() -> int:
           __game.state.weaponIndex = 7;
           __game.startLevel(10);
           __game.forceSummon();
+          __game.boss.x = innerWidth / 2;
+          __game.boss.y = innerHeight * 0.42;
           __game.state.cool = 0;
           __game.attack(innerWidth / 2, __game.boss.y);
           __game.gp.pause('shot');
