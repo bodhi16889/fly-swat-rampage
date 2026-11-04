@@ -135,6 +135,21 @@ def main() -> int:
               all(a > b for a, b in zip(diff["spawn"], diff["spawn"][1:]))
               and all(a < b for a, b in zip(diff["boss"], diff["boss"][1:])), str(diff))
 
+        profile = page.evaluate("({name: __game.profile.name, stored: localStorage.getItem('fly.swat.profile'),"
+                                " shown: document.getElementById('profileName').textContent})")
+        check("本機暱稱：首次自動產生並存在 localStorage",
+              bool(profile["name"]) and profile["stored"] and profile["name"] == profile["shown"],
+              str(profile))
+        page.click("#btnRename")
+        page.fill("#nameInput", "<b>Adan</b>")
+        page.click("#btnSaveName")
+        time.sleep(0.2)
+        renamed = page.evaluate("({name: __game.profile.name, stored: localStorage.getItem('fly.swat.profile'),"
+                                " shown: document.getElementById('profileName').textContent})")
+        check("改名：去除標籤、立即生效並持久化",
+              renamed["name"] == "Adan" and renamed["shown"] == "Adan"
+              and '"Adan"' in (renamed["stored"] or ""), str(renamed))
+
         page.click(".lvcell[data-level='1']")
         time.sleep(0.4)
         st = page.evaluate("({phase: __game.state.phase, level: __game.state.level, target: __game.LEVELS[1].goal.target, flies: __game.flies.length})")
@@ -375,6 +390,41 @@ def main() -> int:
         flame = page.evaluate("window.__probe.map(f => f.hp)")
         page.mouse.up()
         check("火焰：扇形持續傷害", flame_ok, str(flame))
+
+        # ---------- 5b. 每關 PB / 本機排行 ----------
+        def win_score(n: int, score: int):
+            page.evaluate(f"__game.startLevel({n}); __game.addScore({score} - __game.state.levelScore)")
+            page.wait_for_function("__game.state.phase === 'won'", timeout=5_000)
+
+        win_score(1, 340)
+        b1 = page.evaluate("__game.bests['1']")
+        pb_ui = page.evaluate("document.querySelector('.pb') ? document.querySelector('.pb').textContent : ''")
+        check("PB：通關後記錄本關最佳（分數、名字、時間）",
+              bool(b1) and b1[0]["value"] == 340 and b1[0]["name"] == "Adan"
+              and isinstance(b1[0]["timeMs"], int) and "340" in pb_ui, f"{b1} / {pb_ui}")
+        win_score(1, 500)
+        check("PB：更高分會刷新", page.evaluate("__game.bests['1'][0].value") == 500)
+        win_score(1, 340)
+        check("PB：較差分數不會蓋掉最佳",
+              page.evaluate("__game.bests['1'][0].value") == 500
+              and len(page.evaluate("__game.bests['1']")) == 3)
+        page.evaluate("__game.showBoard(1)")
+        board = page.evaluate("({rows: document.querySelectorAll('.brow[data-brow]').length,"
+                              " first: document.querySelector('.brow[data-brow]').textContent.trim().replace(/\s+/g, ' ')})")
+        check("本機排行：章節 20 關列表顯示最佳",
+              board["rows"] == 20 and "500" in board["first"], str(board))
+        page.click(".brow[data-brow='1']")
+        time.sleep(0.2)
+        detail = page.evaluate("({rows: document.querySelectorAll('.brow.static').length,"
+                               " text: document.querySelector('.brow.static').textContent.trim().replace(/\s+/g, ' ')})")
+        check("本機排行：關卡前 5 名", detail["rows"] == 3 and "500" in detail["text"], str(detail))
+        page.evaluate("__game.showStart()")
+        page.click("#btnRename")
+        page.fill("#nameInput", "Guest")
+        page.click("#btnSaveName")
+        win_score(1, 340)
+        names = page.evaluate("__game.bests['1'].map(e => e.name)")
+        check("同一裝置可用不同暱稱上榜", "Adan" in names and "Guest" in names, str(names))
 
         # ---------- 6. 防禦關（第 3 章） ----------
         goto_level(41)
@@ -694,6 +744,24 @@ def main() -> int:
         sp.wait_for_function("getComputedStyle(document.getElementById('modal')).opacity === '0'", timeout=3_000)
         sp.screenshot(path=str(ART / "fly-v5-640x480.png"))
         sctx.close()
+
+        # ---------- 15. 語言切換（EN → 中，重載後生效） ----------
+        lctx = browser.new_context(locale="en-US")
+        lp = lctx.new_page()
+        lp.goto(url, wait_until="load")
+        lp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        h1_en = lp.evaluate("document.querySelector('#card h1').textContent")
+        with lp.expect_navigation(wait_until="load"):
+            lp.click("#btnLang")
+        lp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        zh = lp.evaluate("({lang: __game.lang, stored: localStorage.getItem('fly.swat.lang'),"
+                         " h1: document.querySelector('#card h1').textContent,"
+                         " htmlLang: document.documentElement.lang})")
+        check("語言切換：英文介面可切中文、選擇會記住",
+              h1_en == "FLY SWAT RAMPAGE" and zh["lang"] == "zh" and zh["stored"] == "zh"
+              and zh["h1"] == "打擊蒼蠅大作戰" and zh["htmlLang"] == "zh-Hant",
+              f"{h1_en} -> {zh['h1']} / {zh['stored']}")
+        lctx.close()
 
         browser.close()
 

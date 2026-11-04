@@ -103,7 +103,20 @@
   .chtab small { font-size: 8px; color: #a9947a; }
   .chtab.active { background: linear-gradient(180deg, #ffb347, #ef8c2e); color: #2a1706; border-color: transparent; font-weight: 700; }
   .chtab.active small { color: #5a3a14; }
-  .chapterInfo { font-size: 10px; color: #a9947a; margin: 4px 0 6px; letter-spacing: .08em; }
+  .chapterInfo { font-size: 10px; color: #a9947a; margin: 4px 0 6px; letter-spacing: .08em; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .profile { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 10px 0 2px; font-size: 11px; color: #cbb79c; }
+  .profile b { color: #ffe9c9; }
+  .pfBtns { display: flex; gap: 6px; }
+  #nameInput { width: 130px; padding: 7px 10px; border-radius: 9px; border: 1px solid rgba(255, 200, 130, .45); background: rgba(20, 14, 9, .8); color: #fff3e0; font: inherit; }
+  .mini { padding: 5px 9px; border-radius: 999px; font-size: 10px; letter-spacing: .02em; }
+  .mini.strong { background: linear-gradient(180deg, #ffb347, #ef8c2e); color: #2a1706; border-color: transparent; font-weight: 700; }
+  .boardList { margin: 10px 0 4px; max-height: 52vh; overflow-y: auto; text-align: left; }
+  .brow { display: grid; grid-template-columns: 36px 1fr auto; gap: 8px; align-items: center; width: 100%; padding: 7px 10px; margin: 4px 0; border-radius: 10px; font-size: 11px; text-align: left; }
+  .brow.static { border: 1px solid rgba(255, 200, 130, .18); background: rgba(255, 190, 110, .05); }
+  .brow b { color: #ffd166; font-size: 10px; }
+  .brow span { color: #f0e2cc; }
+  .brow i { font-style: normal; color: #a9947a; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+  .pb { margin-top: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 190, 110, .1); color: #ffd166; font-size: 11px; }
   .lvgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 6px 0 10px; }
   .lvcell { padding: 7px 0 6px; border-radius: 11px; display: grid; justify-items: center; gap: 0; }
   .lvcell b { font-size: 9px; color: #ffd166; }
@@ -754,6 +767,22 @@ const I18N = {
     revived: 'Revived! +15 seconds',
     revivedEndless: 'Back in the fight! Misses cleared.',
     boardTitle: '🏆 Endless best',
+    player: 'Player',
+    editName: 'Rename',
+    saveName: 'Save',
+    cancelName: 'Cancel',
+    localBoard: 'Local leaderboard',
+    noRecord: 'No record yet',
+    personalBest: 'Personal best',
+    newBest: 'NEW BEST',
+    revivedTag: 'revived',
+    boardHint: 'Tap a level to see its top 5',
+    back: 'Back',
+    scorePts: '{n} pts',
+    hpLeft: '{n} HP',
+    secondsMs: '{s}s',
+    bestBy: 'by {name}',
+    languageSwitch: '中文',
     boardRow: '#{i} · {s}s · combo {c}',
     levelCleared: '★',
     locked: '🔒',
@@ -851,6 +880,22 @@ const I18N = {
     revived: '復活！+15 秒',
     revivedEndless: '續命成功！容錯歸零',
     boardTitle: '🏆 無盡模式排行',
+    player: '玩家',
+    editName: '改名',
+    saveName: '儲存',
+    cancelName: '取消',
+    localBoard: '本機排行',
+    noRecord: '尚無紀錄',
+    personalBest: '本關最佳',
+    newBest: '新紀錄',
+    revivedTag: '復活',
+    boardHint: '點關卡看前 5 名',
+    back: '返回',
+    scorePts: '{n} 分',
+    hpLeft: '{n} 衛生度',
+    secondsMs: '{s} 秒',
+    bestBy: 'by {name}',
+    languageSwitch: 'EN',
     boardRow: '#{i} · {s} 秒 · Combo {c}',
     levelCleared: '★',
     locked: '🔒',
@@ -889,6 +934,8 @@ function detectLang() {
   try {
     const q = new URLSearchParams(location.search).get('lang');
     if (q) return /^zh/i.test(q) ? 'zh' : 'en';
+    const stored = localStorage.getItem('fly.swat.lang');
+    if (stored === 'zh' || stored === 'en') return stored;
     const list = (navigator.languages && navigator.languages.length)
       ? navigator.languages : [navigator.language || 'en'];
     for (const l of list) if (/^zh/i.test(l)) return 'zh';
@@ -1338,6 +1385,95 @@ function endlessUnlocked() { return !!loadProgress()[100]; }
 function loadBoard() {
   try { return JSON.parse(localStorage.getItem(BOARD_KEY) || '[]'); } catch (e) { return []; }
 }
+const PROFILE_KEY = 'fly.swat.profile';
+const BEST_KEY = 'fly.swat.best';
+
+function loadProfile() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
+    return p && typeof p.name === 'string' ? p : null;
+  } catch (e) { return null; }
+}
+function saveProfile(p) {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) { /* ignore */ }
+}
+function defaultPlayerName() {
+  return (LANG === 'zh' ? '玩家' : 'Player') + '#' + randInt(1000, 9999);
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+function cleanPlayerName(raw) {
+  const s = String(raw == null ? '' : raw)
+    .replace(/<[^>]*>/g, '')
+    .replace(/[\u0000-\u001f<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 12);
+  return s || defaultPlayerName();
+}
+let PROFILE = loadProfile();
+if (!PROFILE || !PROFILE.name) {
+  PROFILE = { name: defaultPlayerName(), at: Date.now() };
+  saveProfile(PROFILE);
+}
+
+function loadBests() {
+  try {
+    const v = JSON.parse(localStorage.getItem(BEST_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch (e) { return {}; }
+}
+function saveBests(b) {
+  try { localStorage.setItem(BEST_KEY, JSON.stringify(b)); } catch (e) { /* ignore */ }
+}
+/* 每關的排名規則：分數/衛生度比高，擊殺/Boss 比時間（快者優先），平手比失誤 */
+function compareBest(a, b, type) {
+  if (type === 'score' || type === 'defend') {
+    return (b.value - a.value) || (a.timeMs - b.timeMs) || ((a.misses || 0) - (b.misses || 0));
+  }
+  return (a.timeMs - b.timeMs) || ((a.misses || 0) - (b.misses || 0));
+}
+function metricText(entry, type) {
+  if (!entry) return t('noRecord');
+  if (type === 'score') return t('scorePts', { n: entry.value });
+  if (type === 'defend') return t('hpLeft', { n: entry.value });
+  return t('secondsMs', { s: (entry.value / 1000).toFixed(1) });
+}
+function recordBest(level, entry) {
+  const cfg = LEVELS[level];
+  const type = cfg ? cfg.goal.type : 'score';
+  const bests = loadBests();
+  const list = Array.isArray(bests[level]) ? bests[level].slice() : [];
+  const prev = list[0] || null;
+  list.push(entry);
+  list.sort((a, b) => compareBest(a, b, type));
+  const rank = list.findIndex((x) => x === entry) + 1;
+  const isNew = !prev || compareBest(entry, prev, type) < 0;
+  bests[level] = list.slice(0, 5);
+  saveBests(bests);
+  return { best: bests[level][0], rank, isNew, type };
+}
+function recordRun() {
+  if (state.endless || !state.levelConfig || state.phase !== 'won') return null;
+  const cfg = state.levelConfig;
+  const type = cfg.goal.type;
+  const timeMs = Math.max(0, Math.round((cfg.time - Math.max(0, state.timeLeft)) * 1000));
+  const value = type === 'score' ? state.levelScore
+    : type === 'defend' ? Math.ceil((state.defend && state.defend.hp) || 0)
+      : timeMs;
+  return recordBest(state.level, {
+    name: PROFILE.name,
+    value,
+    timeMs,
+    misses: state.misses,
+    revived: !!state.revived,
+    at: Date.now(),
+  });
+}
+
 function removeBoardEntry(at) {
   if (!at) return;
   try {
@@ -2554,6 +2690,7 @@ function showToast(text) {
 function showResult(win, reason, board) {
   const cfg = state.levelConfig;
   const last = !state.endless && state.level >= 100;
+  const pb = win ? recordRun() : null;
   const stats = win
     ? `<div><span>${t('thisRun')}</span><b>${state.levelScore}</b></div>
        <div><span>${t('totalScore')}</span><b>${state.score}</b></div>
@@ -2580,6 +2717,7 @@ function showResult(win, reason, board) {
     <h2>${win ? (last ? t('winAll') : t('winLevel')) : (state.endless ? t('endlessEnd') : t('loseTitle'))}</h2>
     <p>${state.endless ? t('endlessCard') : t('levelN', { n: state.level, name: lvName(state.level) })}</p>
     <div class="stats">${stats}</div>
+    ${pb ? `<div class="pb">🏅 ${t('personalBest')} · <b>${metricText(pb.best, pb.type)}</b> · ${t('bestBy', { name: esc(pb.best.name) })}${pb.isNew ? ' · ' + t('newBest') : ''}</div>` : ''}
     ${boardHtml}
     <div class="btns">
       ${reviveBtn}
@@ -2688,10 +2826,18 @@ function showStart() {
 
   dom.card.innerHTML = `
     <h1>${t('gameTitle')}</h1>
-    <div class="sub">V5 · FLY SWAT RAMPAGE</div>
+    <div class="sub">V5 · ARCADE</div>
     <p>${t('tagline')}</p>
+    <div class="profile">
+      <span>${t('player')}: <b id="profileName"></b></span>
+      <span class="pfBtns">
+        <button id="btnRename" class="mini">✏️ ${t('editName')}</button>
+        <button id="btnLang" class="mini">🌐 ${t('languageSwitch')}</button>
+      </span>
+    </div>
     <div class="chapters">${chapBtns}</div>
-    <div class="chapterInfo">${LANG === 'zh' ? chapter.name : chapter.name_en} · ${chapCleared}/20</div>
+    <div class="chapterInfo"><span>${LANG === 'zh' ? chapter.name : chapter.name_en} · ${chapCleared}/20</span>
+      <button id="btnBoard" class="mini">🏆 ${t('localBoard')}</button></div>
     <div class="lvgrid">${cells}</div>
     <button class="lv endless${endlessUnlocked() ? '' : ' locked'}" id="btnEndlessMenu" ${endlessUnlocked() ? '' : 'disabled'}>
       <b>${endlessUnlocked() ? t('endlessCard') : t('endlessLocked')}</b><span>${t('endlessSub')}</span></button>
@@ -2699,8 +2845,15 @@ function showStart() {
     <div class="btns"><button id="btnStart" class="primary">${t('startFrom1')}</button></div>
     <div class="hint">${t('playHint')}</div>`;
   dom.modal.classList.remove('hidden');
+  document.getElementById('profileName').textContent = PROFILE.name;
   document.getElementById('btnStart').onclick = () => { Sfx.init(); state.menuChapter = 1; startLevel(1, true); };
   document.getElementById('btnEndlessMenu').onclick = () => { Sfx.init(); startEndless(); };
+  document.getElementById('btnRename').onclick = () => renderRename();
+  document.getElementById('btnLang').onclick = () => {
+    try { localStorage.setItem('fly.swat.lang', LANG === 'zh' ? 'en' : 'zh'); } catch (e) { /* ignore */ }
+    location.reload();
+  };
+  document.getElementById('btnBoard').onclick = () => showBoard(chap);
   dom.card.querySelectorAll('.chtab').forEach((btn) => {
     if (btn.disabled) return;
     btn.onclick = () => { state.menuChapter = +btn.dataset.chap; showStart(); };
@@ -2709,6 +2862,77 @@ function showStart() {
     if (btn.disabled) return;
     btn.onclick = () => { Sfx.init(); startLevel(+btn.dataset.level, false); };
   });
+}
+
+function renderRename() {
+  const row = document.querySelector('.profile');
+  if (!row) return;
+  row.innerHTML = `<input id="nameInput" maxlength="12" autocomplete="off" spellcheck="false" />
+    <span class="pfBtns">
+      <button id="btnSaveName" class="mini strong">${t('saveName')}</button>
+      <button id="btnCancelName" class="mini">${t('cancelName')}</button>
+    </span>`;
+  const input = document.getElementById('nameInput');
+  input.value = PROFILE.name;
+  input.focus();
+  input.select();
+  const save = () => {
+    PROFILE = { name: cleanPlayerName(input.value), at: Date.now() };
+    saveProfile(PROFILE);
+    showStart();
+  };
+  document.getElementById('btnSaveName').onclick = save;
+  document.getElementById('btnCancelName').onclick = () => showStart();
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') showStart();
+  });
+}
+
+function showBoard(chapter) {
+  state.phase = 'menu';
+  state.endless = false;
+  const chap = clamp(chapter || state.menuChapter || 1, 1, CHAPTERS.length);
+  state.menuChapter = chap;
+  const c = CHAPTERS[chap - 1];
+  const bests = loadBests();
+  const rows = Array.from({ length: 20 }, (_, i) => {
+    const n = (chap - 1) * 20 + i + 1;
+    const type = LEVELS[n].goal.type;
+    const e = (bests[n] || [])[0];
+    return `<button class="brow" data-brow="${n}">
+      <b>${n}</b>
+      <span>${e ? metricText(e, type) : t('noRecord')}${e && e.revived ? ` <i>(${t('revivedTag')})</i>` : ''}</span>
+      <i>${e ? esc(e.name) : ''}</i></button>`;
+  }).join('');
+  dom.card.innerHTML = `
+    <h2>🏆 ${t('localBoard')}</h2>
+    <p>${LANG === 'zh' ? c.name : c.name_en} · ${t('boardHint')}</p>
+    <div class="boardList">${rows}</div>
+    <div class="btns"><button id="btnBoardBack" class="primary">${t('back')}</button></div>`;
+  dom.modal.classList.remove('hidden');
+  document.getElementById('btnBoardBack').onclick = () => showStart();
+  dom.card.querySelectorAll('.brow[data-brow]').forEach((btn) => {
+    btn.onclick = () => showBoardLevel(+btn.dataset.brow);
+  });
+}
+
+function showBoardLevel(n) {
+  const type = LEVELS[n].goal.type;
+  const list = loadBests()[n] || [];
+  const rows = list.length
+    ? list.map((e, i) => `<div class="brow static">
+        <b>#${i + 1}</b>
+        <span>${metricText(e, type)}${e.revived ? ` <i>(${t('revivedTag')})</i>` : ''}</span>
+        <i>${esc(e.name)}</i></div>`).join('')
+    : `<p class="hint">${t('noRecord')}</p>`;
+  dom.card.innerHTML = `
+    <h2>${t('levelShort', { n })}</h2>
+    <p>${lvName(n)} · ${t('localBoard')}</p>
+    <div class="boardList">${rows}</div>
+    <div class="btns"><button id="btnBoardBack" class="primary">${t('back')}</button></div>`;
+  dom.modal.classList.remove('hidden');
+  document.getElementById('btnBoardBack').onclick = () => showBoard(state.menuChapter);
 }
 
 /* ==================================================================== *
@@ -2929,9 +3153,14 @@ window.__game = {
   get unlocked() { return state.unlocked; },
   get progress() { return loadProgress(); },
   get board() { return loadBoard(); },
+  get profile() { return PROFILE; },
+  get bests() { return loadBests(); },
   startLevel,
   startEndless,
   showStart,
+  showBoard,
+  showBoardLevel,
+  renderRename,
   addScore,
   spawnFly: (x, y, type) => {
     const f = new Fly(type || 'house', { x, y });

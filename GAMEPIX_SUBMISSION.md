@@ -3,10 +3,10 @@
 單檔 HTML5（Canvas 2D）直向打蒼蠅遊戲（V5：20 武器、100 關）。已接 GamePix SDK v3（manual lifecycle），
 英文為預設語言、中文僅在 `zh*` 系統顯示。這份文件是「照著填 / 照著傳」的清單。
 
-- 遊戲本體：`index.html`（約 257 KB，零圖檔／零音檔，全部內嵌）
-- 上傳檔：`dist/fly-swat-rampage-gamepix.zip`（約 135 KB，ZIP 根目錄只有 `index.html`）
+- 遊戲本體：`index.html`（約 266 KB，零圖檔／零音檔，全部內嵌）
+- 上傳檔：`dist/fly-swat-rampage-gamepix.zip`（約 137 KB，ZIP 根目錄只有 `index.html`）
 - 素材：`gamepix/assets/`
-- 驗證：`python3 verify_smoke.py`（76 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
+- 驗證：`python3 verify_smoke.py`（85 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
 
 ---
 
@@ -75,7 +75,8 @@ extermination. Fight through 100 levels in 5 chapters — living room, market, b
 campsite and back alley — with a Fly King every 10 levels, then survive the endless rampage.
 
 Easy to learn, quick to play, and full of chain lightning, sticky traps, sonic waves, drones
-and double-damage windows for players who like to optimise their swats.
+and double-damage windows for players who like to optimise their swats. Track a personal best
+on every level and climb the local leaderboard with your own nickname.
 ```
 
 ### 操作說明（若有獨立欄位）
@@ -91,13 +92,13 @@ Bottom bar: switch between unlocked weapons.
 | 用途 | 檔案 | 尺寸 | 大小 |
 | :--- | :--- | :--- | --: |
 | Game Icon | `gamepix/assets/icon-512.png` | 512×512 | 234 KB |
-| Cover / Banner | `gamepix/assets/cover-1920x1080.png` | 1920×1080 | 765 KB |
-| Screenshot 1（章節選關） | `gamepix/assets/screenshots/01-menu.png` | 1080×1920 | 478 KB |
-| Screenshot 2（電蚊拍連鎖） | `gamepix/assets/screenshots/02-action.png` | 1080×1920 | 401 KB |
-| Screenshot 3（麵包店防禦） | `gamepix/assets/screenshots/03-defend.png` | 1080×1920 | 187 KB |
-| Screenshot 4（蠅王＋護盾＋雷射） | `gamepix/assets/screenshots/04-boss.png` | 1080×1920 | 191 KB |
-| Screenshot 5（無盡蟲群） | `gamepix/assets/screenshots/05-endless.png` | 1080×1920 | 229 KB |
-| （封面主視覺，不上傳） | `gamepix/assets/screenshots/00-hero.png` | 1080×1920 | 253 KB |
+| Cover / Banner | `gamepix/assets/cover-1920x1080.png` | 1920×1080 | 773 KB |
+| Screenshot 1（章節選關＋暱稱） | `gamepix/assets/screenshots/01-menu.png` | 1080×1920 | 492 KB |
+| Screenshot 2（電蚊拍連鎖） | `gamepix/assets/screenshots/02-action.png` | 1080×1920 | 404 KB |
+| Screenshot 3（麵包店防禦） | `gamepix/assets/screenshots/03-defend.png` | 1080×1920 | 190 KB |
+| Screenshot 4（蠅王＋護盾＋雷射） | `gamepix/assets/screenshots/04-boss.png` | 1080×1920 | 185 KB |
+| Screenshot 5（無盡蟲群） | `gamepix/assets/screenshots/05-endless.png` | 1080×1920 | 227 KB |
+| （封面主視覺，不上傳） | `gamepix/assets/screenshots/00-hero.png` | 1080×1920 | 275 KB |
 
 封面與圖示上的標題都是 `FLY SWAT RAMPAGE`，與上架名稱一致；素材內無網址、無外部連結。
 要重產：`python3 gamepix/make_assets.py`（Playwright，會起本機伺服器、用真實遊戲畫面截圖）。
@@ -106,7 +107,7 @@ Bottom bar: switch between unlocked weapons.
 
 ```bash
 python3 build_gamepix.py
-# build: dist/fly-swat-rampage-gamepix.zip  135 KB
+# build: dist/fly-swat-rampage-gamepix.zip  137 KB
 # entries: ['index.html']
 # PASS: index.html 在 ZIP 根目錄、只依賴 GamePix SDK、無其他外部連結
 ```
@@ -162,10 +163,11 @@ fly-swat-rampage-gamepix.zip
 - icon 使用系統 emoji 蒼蠅（Apple/Google 渲染略有差異）；若審核對美術有要求，需換成客製插畫。
 - 沒有雲端排行榜、沒有 Service Worker；進度只存在 `localStorage`（GamePix 會同步）。
 - 遊戲是直向設計；在超寬橫向 iframe 會看到較空的兩側，但仍可正常遊玩（已測 640×480 與 1920×1080）。
+- 排行榜是本機（同裝置、可多暱稱、每關前 5），沒有跨裝置／全球榜；全球榜需要後端與 GamePix 身分驗證。
 
 ## 驗證記錄（本機實跑）
 
-- `python3 verify_smoke.py`：**76 / 76 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **76 / 76**。
+- `python3 verify_smoke.py`：**85 / 85 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **85 / 85**。
 - 真 SDK（非 stub）本機模擬：
   - `?gpx_ad=success` → 過關按「下一關」播完後進第 2 關；`?gpx_ad=nofill` → 不播廣告仍進第 2 關（`{success:false}`）。
   - `?gpx_reward=success` → 關卡失敗後復活（`phase=playing`, `timeLeft=65`, `revived=true`）。
@@ -176,7 +178,7 @@ fly-swat-rampage-gamepix.zip
 ## 本機指令
 
 ```bash
-# 76 項 E2E（含 20 武器機制、100 關資料、SDK／廣告／復活／續命、持久化、640×480）
+# 85 項 E2E（含 20 武器機制、100 關資料、暱稱／PB／本機排行、語言切換、SDK／廣告、640×480）
 python3 verify_smoke.py
 
 # 打包並驗證 ZIP 結構

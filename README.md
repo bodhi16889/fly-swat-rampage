@@ -4,7 +4,7 @@
 直向滿版（`viewport-fit=cover` + `touch-action: none`），手機瀏覽器打開就能玩。
 
 > 🌐 線上版：<https://bodhi16889.github.io/fly-swat-rampage/>
-> 🎮 GamePix 上架包：`dist/fly-swat-rampage-gamepix.zip`（ZIP 根目錄即 `index.html`，約 135 KB）；
+> 🎮 GamePix 上架包：`dist/fly-swat-rampage-gamepix.zip`（ZIP 根目錄即 `index.html`，約 137 KB）；
 > 素材在 `gamepix/assets/`；填表文案與合規自查見 [`GAMEPIX_SUBMISSION.md`](GAMEPIX_SUBMISSION.md)。
 > 另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)
 
@@ -16,6 +16,14 @@
 | 長按滑動 | 噴霧、冰霧、火焰：按住連續輸出 |
 | 底部武器列 | 已解鎖的 20 把武器常駐（可橫向捲動），可隨時點選；解鎖進度存在 `localStorage` |
 | 選關卡 | 5 章 × 20 關；通過第 100 關解鎖無盡模式 |
+
+## 玩家 / PB / 本機排行 / 語系
+
+- **暱稱**：首次進入自動產生（如 `Player#4821`／`玩家#4821`），可在選單改名；上限 12 字、移除 HTML 標籤、只存在本機。
+- **每關 PB**：通關自動記錄。分數關比分數；擊殺／Boss 比通關時間；防禦關比剩餘衛生度；平手比失誤。成績會標記是否用過復活。
+- **本機排行榜**：選單「🏆 本機排行」→ 當前章節 20 關一覽 → 點關卡看前 5 名；同一裝置可用不同暱稱上榜。
+- **語系**：抓系統語系（`zh*` 繁體中文、其餘英文），選單可手動切換（🌐）並記住；`?lang=zh|en` 供測試覆寫。
+- 全部存在 `localStorage`：`fly.swat.profile`（暱稱）、`fly.swat.best`（每關前 5）、`fly.swat.lang`（語言）；**沒有後端、沒有跨裝置排行**。
 
 ## 武器（V5：20 把）
 
@@ -86,7 +94,7 @@ python3 verify_smoke.py --headed           # 想看畫面
 python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（76 項檢查）：
+覆蓋範圍（85 項檢查）：
 
 - 版面 / 主循環 / 暖機後 fps
 - 選單：100 關、5 章 × 20 格、20 武器、四種目標型別、無盡未解鎖
@@ -97,6 +105,10 @@ python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage
 - Boss（第 10 關）：80 HP、護盾 8、雷射穿透 −8、Phase 2、力竭雙傷、通關存進度
 - 無盡：第 100 關才解鎖、存活計時、迷你王
 - 武器解鎖持久化：85,000 分→20 把、重載仍保留、重置歸零
+- 本機暱稱：自動產生、改名去標籤、重載保留
+- 每關 PB：通關記錄、較高分刷新、較差分不覆蓋、結果畫面顯示
+- 本機排行：章節 20 關列表、單關前 5、同裝置多暱稱
+- 語言切換：英文介面按 🌐 切中文、存 localStorage、重載生效
 - GamePix SDK：manual lifecycle、pause/resume、插頁廣告時機、關卡復活＋無盡續命、無 SDK 退路
 - 語系：英文預設、`zh` 中文
 - 640×480 iframe、Pixel 5 直向、20 武器列
@@ -132,13 +144,13 @@ RESULT: PASS
 | 2 | `WEAPONS`（20）、`FLY_TYPES`、`CHAPTERS`＋`makeLevel(n)`→`LEVELS`（100）、`ENDLESS_CFG` |
 | 3 | `state`：分數、解鎖、陷阱、毒霧、波、誘餌、火箭、無人機、可頌、蜜蜂、突風、Combo |
 | 4 | `Fly`：遊走／停歇／定身／`eating`／偽裝／Boss 二階段／俯衝／力竭 |
-| 5 | 分數、解鎖、存檔（`fly.swat.progress`／`fly.swat.score`／`fly.swat.endless`） |
+| 5 | 分數、解鎖、存檔（`fly.swat.progress`／`fly.swat.score`／`fly.swat.endless`）、暱稱（`fly.swat.profile`）、每關 PB（`fly.swat.best`）、語言（`fly.swat.lang`） |
 | 6 | `attack()` 模式分派：tap／fan／hold／holdFan／trap／laser／wave／decoy／magnet／rocket／drone／screen → `damageFly` |
 | 7 | 粒子與特效（環、電弧、扇形、文字、閃光） |
 | 8 | 5 種程序化場景（每章共用） |
 | 9 | 蒼蠅繪製（蜜蜂、金斑偽裝、Boss 護盾／Phase 2） |
 | 10 | `update()`：生成、突風、毒霧、陷阱、波、誘餌、火箭、無人機、護盾、目標判定 |
-| 11 | HUD、章節選單（5 章 × 20 格）、結算（復活／續命）、排行 |
+| 11 | HUD、章節選單（暱稱／改名／語言切換／5×20 格）、本機排行（章節＋單關前 5）、結算（PB／復活／續命） |
 | 12–14 | 輸入、繪製、啟動與 `window.__game` 測試鉤子 |
 
 測試鉤子：`startLevel(n)`、`startEndless()`、`showStart()`、`addScore(n)`、`spawnFly(x,y,type)`、
@@ -151,7 +163,7 @@ waves / decoys / rockets / drones / effects / weapon / progress / board / frame 
 ```bash
 python3 build_gamepix.py        # dist/fly-swat-rampage-gamepix.zip（根目錄只有 index.html）
 python3 gamepix/make_assets.py  # icon 512 / cover 1920×1080 / 5 張 1080×1920 截圖（另產 1 張封面主視覺）
-python3 verify_smoke.py         # 76 項
+python3 verify_smoke.py         # 85 項
 ```
 
 SDK：`GamePixConfig = { lifecycle:'manual' }`、`loading→loaded→gameStart`、`pause/resume`（停時鐘＋音訊）、
@@ -167,7 +179,8 @@ git push origin main          # 本站由 main / root 自動部署
 
 ## 已知限制
 
-- 沒有 Service Worker、沒有雲端排行榜（本機 top 5）。
+- 沒有 Service Worker；排行榜是**本機**（每關前 5、同裝置多暱稱），沒有跨裝置／全球榜。
+- 改名只影響之後的成績；舊紀錄保留當時的暱稱。
 - 單點類武器取最近一隻；蜜蜂只對點擊類武器有懲罰（噴霧／雷射／波會跳過友軍）。
 - 鹽槍／火焰方向為「點擊點 → 畫面中心」。
 - 場景為程序化繪製（無圖檔）；換美術可改 `drawBackground()`。
