@@ -109,11 +109,18 @@ def main() -> int:
         cx, cy = center["w"] * 0.5, center["h"] * 0.45
         fly = page.evaluate(f"(() => {{ const f = __game.spawnFly({cx}, {cy}, 'house'); return {{x: f.x, y: f.y}}; }})()")
         before = page.evaluate("({score: __game.state.score, misses: __game.state.misses})")
+        page.evaluate("__game.audio.log.length = 0")
         page.mouse.click(fly["x"], fly["y"])
         time.sleep(0.25)
         after = page.evaluate("({score: __game.state.score, misses: __game.state.misses, dying: __game.flies.filter(f => f.state === 'dying').length, effects: __game.effects.length})")
         check("點擊命中 → 得分", after["score"] > before["score"], f"{before['score']} -> {after['score']}")
         check("命中 → 蒼蠅進入死亡動畫 + 粒子特效", after["dying"] >= 1 and after["effects"] > 0, f"dying={after['dying']} fx={after['effects']}")
+
+        # 音效：一次出手 = 揮擊 + 擊殺兩層，且擊殺不再重播拍打聲
+        snd = page.evaluate("__game.audio.log.map(e => e.name)")
+        check("V2 音效分層：swing + kill", "swing" in snd and "kill" in snd, str(snd))
+        check("擊殺不會重播拍打聲（不再 slap）", "slap" not in snd, str(snd))
+        check("單次擊殺只播一次 kill", snd.count("kill") == 1, str(snd))
 
         # 空拍：先清場再點空白處（避免剛好打到路過的蒼蠅）
         wait_cool(page)
@@ -146,6 +153,8 @@ def main() -> int:
         time.sleep(0.1)   # 電弧特效 ttl 0.22s，要在消失前取樣
         aoe = page.evaluate("({dead: __game.flies.filter(f => f.state === 'dying' || f.dead).length, zaps: __game.effects.filter(e => e.type === 'zap').length})")
         check("電蚊拍一次電死範圍內多隻（含電弧特效）", aoe["dead"] >= 3 and aoe["zaps"] >= 3, str(aoe))
+        rapid = page.evaluate("__game.audio.log.filter(e => e.name === 'kill').length")
+        check("一次多殺的擊殺音有被限流（≤2 聲）", 0 < rapid <= 2, f"kill 音 {rapid} 聲 / 同時死 {aoe['dead']} 隻")
 
         # 噴霧：長按持續傷害
         page.evaluate("__game.addScore(2000)")   # 累積 3500
@@ -209,11 +218,14 @@ def main() -> int:
         hp_after = page.evaluate("(__game.boss ? __game.boss.hp : 0)")
         check("僵直時承受雙倍傷害（1 傷 → 扣 2 血）", hp_before - hp_after == 2, f"{hp_before} -> {hp_after}")
 
-        page.evaluate("__game.state.cool = 0; __game.boss.hp = 1;")
+        page.evaluate("__game.state.cool = 0; __game.boss.hp = 1; __game.audio.log.length = 0")
         page.evaluate(f"__game.attack({boss_pos['x']}, {boss_pos['y']})")
         time.sleep(0.5)
         win3 = page.evaluate("({phase: __game.state.phase, modal: !document.getElementById('modal').classList.contains('hidden'), text: document.getElementById('card').textContent})")
         check("Boss 血量歸零 → 通關畫面", win3["phase"] == "won" and win3["modal"] and "通關" in win3["text"], win3["text"][:40])
+        bsnd = page.evaluate("__game.audio.log.map(e => e.name)")
+        check("Boss 倒下播放專屬音效（bossDown）", bsnd.count("bossDown") == 1, str(bsnd))
+        check("Boss 倒下不再疊關卡通關音（win）", bsnd.count("win") == 0, str(bsnd))
 
         # ---------- 7. 第 1 關達標 → 下一關按鈕 ----------
         page.evaluate("__game.startLevel(1)")
@@ -228,7 +240,17 @@ def main() -> int:
         time.sleep(0.4)
         check("按下「下一關」→ 進入第 2 關", page.evaluate("__game.state.level") == 2 and page.evaluate("__game.state.phase") == "playing")
 
-        # ---------- 8. 截圖 ----------
+        # ---------- 8. 靜音鈕 ----------
+        page.click("#muteBtn")
+        time.sleep(0.15)
+        muted = page.evaluate("({muted: __game.audio.muted, icon: document.getElementById('muteBtn').textContent, saved: localStorage.getItem('fly.swat.muted')})")
+        check("靜音鈕可關閉音效並記住設定", muted["muted"] is True and muted["saved"] == "1", str(muted))
+        page.click("#muteBtn")
+        time.sleep(0.15)
+        unmuted = page.evaluate("({muted: __game.audio.muted, saved: localStorage.getItem('fly.swat.muted')})")
+        check("靜音鈕可再開啟", unmuted["muted"] is False and unmuted["saved"] == "0", str(unmuted))
+
+        # ---------- 9. 截圖 ----------
         page.evaluate("__game.startLevel(1)")
         time.sleep(0.8)
         page.screenshot(path=str(ART / "fly-desktop.png"))

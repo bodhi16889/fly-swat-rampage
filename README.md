@@ -1,10 +1,34 @@
-# 打擊蒼蠅大作戰 · Fly Swat Rampage
+# 打擊蒼蠅大作戰 · Fly Swat Rampage — **V2（音效重整）**
 
 手機 H5 單指觸控打蒼蠅遊戲。**單一 `index.html`、零依賴、Canvas 2D + Web Audio 即時合成音效**，
 直向滿版（`viewport-fit=cover` + `touch-action: none`），用手機瀏覽器打開就能玩。
 
 > 🌐 線上版：<https://bodhi16889.github.io/fly-swat-rampage/>
 > （另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)）
+
+## V2 改了什麼（音效）
+
+**問題（V1）**
+
+- 擊殺蒼蠅時，`die()` 又播了一次「報紙拍擊」→ 一次點擊同時有 **揮擊聲 + 擊殺拍擊聲** 兩層，聽起來像多打了一下。
+- Boss 倒下時觸發關卡通用勝利音（4 音上行），而且 Boss 死亡的音效與它重疊 → 一次爆出多層聲音，很吵、也很怪。
+
+**V2 做法（分層 + 限流 + 專屬音）**
+
+| 事件 | 音效 | 音量 / 規則 |
+| :--- | :--- | :--- |
+| 出手（含揮空） | `swing`：紙張／網拍／電擊三種質感 | 低（0.12–0.14），每次出手只有一聲 |
+| 命中未死（綠頭蠅第 1 下、Boss） | `hit`：短促敲擊 | 0.08–0.09 |
+| 擊殺 | `kill`：很輕的一聲「噗」 | 0.075，**60ms 限流**：一次電死 5 隻也只播 1–2 聲 |
+| 噴霧 / 雷射 | `spray` / `laser` | 0.14 / 0.2 |
+| Boss 倒下 | `bossDown`：110→40Hz 低頻倒塌 + 塵土低通噪音，**0.42s 後**才進 3 音勝利動機 | 0.26，且**不再**同時播關卡通關音 |
+| 母帶 | `master(0.4)` → `DynamicsCompressor(-18dB, ratio 6)` | 疊音不爆音 |
+
+另外新增右上角 **🔊 / 🔇 靜音鈕**（設定存在 `localStorage.fly.swat.muted`，重新整理仍保留），
+手機上嫌吵可以直接關掉。
+
+測試會檢查：單次擊殺是 `['swing','kill']`（不再有 `slap`）、多殺時 kill 音 ≤2 聲、
+Boss 倒下只有一個 `bossDown` 且 `win` 為 0 次、靜音鈕可切換並記住設定。
 
 ## 玩法
 
@@ -83,6 +107,12 @@ python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/
 [PASS] 僵直時承受雙倍傷害（1 傷 → 扣 2 血） 50 -> 48
 [PASS] Boss 血量歸零 → 通關畫面
 [PASS] 第 1 關 600 分達標 → 通關 + 下一關按鈕 → 進入第 2 關
+[PASS] V2 音效分層：swing + kill — ['swing', 'kill']
+[PASS] 擊殺不會重播拍打聲（不再 slap）
+[PASS] 一次多殺的擊殺音有被限流（≤2 聲） — kill 音 2 聲 / 同時死 3 隻
+[PASS] Boss 倒下播放專屬音效（bossDown） — ['swing', 'hit', 'bossDown']
+[PASS] Boss 倒下不再疊關卡通關音（win）
+[PASS] 靜音鈕可關閉音效並記住設定 / 可再開啟
 [PASS] 手機（Pixel 5）以觸控開始遊戲 / 手機觸控拍打命中有計分
 RESULT: PASS
 ```
