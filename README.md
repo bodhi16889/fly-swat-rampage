@@ -68,7 +68,7 @@ python verify_smoke.py --headed                         # 想看畫面
 python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（37 項）：
+覆蓋範圍（48 項檢查）：
 
 - 版面 / 主循環 / 選關卡（5 關 + 無盡未解鎖）/ 8 武器列
 - 武器門檻 `[0,400,1000,1800,3000,4500,6500,9000]`
@@ -108,8 +108,7 @@ python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/
 RESULT: PASS
 ```
 
-截圖：`artifacts/fly-v4-mobile.png`、`fly-v4-desktop.png`、`fly-v4-menu.png`（選關卡）、
-`fly-v4-defend.png`（第 3 關）、`fly-v4-boss.png`（第 5 關護盾）
+截圖：`artifacts/fly-v4-mobile.png`、`fly-v4-desktop.png`、`fly-v4-menu.png`（選關卡）
 
 ## 程式結構（都在 `index.html`）
 
