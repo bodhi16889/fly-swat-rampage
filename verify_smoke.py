@@ -186,6 +186,47 @@ def main() -> int:
         check("100 關場景：像素指紋全部不同（不是同一張換色）",
               len(hashes) == 100, f"unique={len(hashes)}")
 
+        # ---------- 2b. 回歸：動態層（雨／霓虹／第4章日光／營火）不得拋錯 ----------
+        # 2026-11-05 真實缺陷：drawSceneFx 用了未宣告的 g（實際叫 ctx），
+        # 只有 scene time 為 rain/neon 的關卡會走到該分支 → 每 3 關壞一關（含第 43 關）。
+        # 症狀不只「畫面空」：rAF 第一帧就抛錯 → __game.frame 完全不再前進（整個遊戲凍結）。
+        def frames_advance(n_frames: int = 3, budget_s: float = 2.0) -> bool:
+            start = page.evaluate("__game.frame")
+            deadline = time.time() + budget_s
+            while time.time() < deadline:
+                if page.evaluate("__game.frame") >= start + n_frames:
+                    return True
+                time.sleep(0.05)
+            return False
+
+        rain_levels = []
+        for n in range(1, 101):
+            t = page.evaluate(f"__game.sceneSpec({n}).time.id")
+            if t in ("rain", "neon"):
+                rain_levels.append(n)
+
+        err_before = len(errors)
+        stuck = []
+        for n in rain_levels:
+            page.evaluate(f"__game.startLevel({n})")
+            if not frames_advance(3):
+                stuck.append(n)
+        new_errs = errors[err_before:]
+        check("雨／霓虹關卡（含第 43 關）動態層可繪製、主循環不中斷",
+              not stuck and not new_errs and 43 in rain_levels,
+              f"{len(rain_levels)} 關; stuck={stuck[:4]}; errs={new_errs[:2]}")
+
+        page.evaluate("__game.startLevel(43)")
+        lv43 = page.evaluate("({phase: __game.state.phase, level: __game.state.level, flies: __game.flies.length})")
+        check("第 43 關可進入、生成目標、frame 持續前進",
+              lv43["phase"] == "playing" and lv43["level"] == 43 and lv43["flies"] > 0 and frames_advance(5),
+              str(lv43))
+
+        # 回到選單，否則後續對 .lvcell 的點擊會被 canvas 攔走（pointer-events 被遊戲吃掉）
+        page.evaluate("__game.showStart()")
+        page.wait_for_selector(".lvcell[data-level='1']", state="visible", timeout=10_000)
+        time.sleep(0.3)
+
         page.click(".lvcell[data-level='1']")
         time.sleep(0.4)
         st = page.evaluate("({phase: __game.state.phase, level: __game.state.level, target: __game.LEVELS[1].goal.target, flies: __game.flies.length})")
