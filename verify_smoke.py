@@ -460,9 +460,13 @@ def main() -> int:
               zh_h1 == "打擊蒼蠅大作戰" and "報紙" in zh_chip and zh_lang == "zh-Hant",
               f"{zh_h1} / {zh_chip} / lang={zh_lang}")
 
+        check("GamePix：非 Player 的公開頁不呼叫廣告（SDK 會模擬假廣告蓋版）",
+              page.evaluate("__game.gp.adsAllowed === false"))
+
         # 用 stub 取代 Player，驗廣告流程（真 SDK 在 Player 外只會模擬）
         page.evaluate("""(() => {
           window.__gpStub = { ints: 0, rews: 0, rewOk: true };
+          __game.gp.adsAllowed = true;          // 測試頁是 localhost 頂層，手動開啟廣告
           window.GamePix = { ads: {
             interstitial: () => { window.__gpStub.ints++; return Promise.resolve({ success: true }); },
             reward: () => { window.__gpStub.rews++; return Promise.resolve({ success: window.__gpStub.rewOk }); },

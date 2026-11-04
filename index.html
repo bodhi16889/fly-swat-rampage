@@ -808,8 +808,19 @@ function lvTip(n) {
 /* ==================================================================== *
  * 0c. GamePix SDK 包裝（沒有 SDK 時全部 no-op，遊戲照常可玩）
  * ==================================================================== */
+/* 只有在真正的 Player（iframe 或 gamepix.com）才呼叫廣告；
+   公開 demo（GitHub Pages 頂層頁）若呼叫，SDK 會模擬一個假廣告蓋版。
+   本機要測廣告時加 ?gpx_ads=1。 */
+function adsAllowedNow() {
+  try {
+    if (window.self !== window.top) return true;
+    if (/(^|\.)gamepix\.com$/i.test(location.hostname)) return true;
+    return /[?&]gpx_ads=1\b/.test(location.search);
+  } catch (e) { return true; }
+}
 const GP = {
   enabled: false, loadedDone: false, started: false, adBusy: false,
+  adsAllowed: adsAllowedNow(),
   calls: [], log: [], pauseReasons: new Set(),
 
   api() { return (typeof window !== 'undefined' && window.GamePix) || null; },
@@ -896,6 +907,10 @@ const GP = {
   },
 
   _ad(kind) {
+    if (!this.adsAllowed) {
+      this.log_('ad:' + kind + ':demo');
+      return Promise.resolve({ success: false, message: 'ads-disabled-outside-player' });
+    }
     if (this.adBusy) return Promise.resolve({ success: false, message: 'busy' });
     const api = this.api();
     const modern = api && api.ads && typeof api.ads[kind] === 'function';

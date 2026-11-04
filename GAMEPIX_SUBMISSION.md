@@ -6,7 +6,7 @@
 - 遊戲本體：`index.html`（約 240 KB，零圖檔／零音檔，全部內嵌）
 - 上傳檔：`dist/fly-swat-rampage-gamepix.zip`（約 130 KB，ZIP 根目錄只有 `index.html`）
 - 素材：`gamepix/assets/`
-- 驗證：`python3 verify_smoke.py`（61 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
+- 驗證：`python3 verify_smoke.py`（62 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
 
 ---
 
@@ -33,6 +33,9 @@
 沒有 SDK（`file://`、直接開頁、CDN 掛掉）時全部 no-op：廣告回 `{success:false}`、遊戲照常可玩。
 本機可在網址加 `?gpx_inspector=1` 看 SDK 模擬狀態；廣告結果用
 `?gpx_ad=nofill|error`、`?gpx_reward=cancel|success` 強制測試。
+**本機測廣告要同時加 `?gpx_ads=1`**（例如 `?gpx_ads=1&gpx_ad=success&gpx_reward=success&gpx_user=guest`），
+因為公開 demo（GitHub Pages 頂層頁）不啟用廣告，避免 SDK 在非 Player 環境模擬假廣告；
+在 GamePix Player／iframe 或 gamepix.com 會自動啟用。
 
 存檔使用 `localStorage`，key 固定為 `fly.swat.progress`、`fly.swat.score`、`fly.swat.endless`、
 `fly.swat.muted`（GamePix 只會同步固定 key 的讀寫，不列舉）。
@@ -112,7 +115,7 @@ fly-swat-rampage-gamepix.zip
 └── index.html      ← 必須在根目錄，沒有多一層資料夾
 ```
 
-上傳到 Build 頁後，用後台 **Preview / Test** 測以下項目：
+上傳到 Build 頁後，用後台 **Preview / Test** 測以下項目（若是在本機瀏覽器直接開，廣告網址要帶 `gpx_ads=1`；在 Player／Testkit 內不用）：
 
 - [ ] 載入條出現後消失，選單正常顯示（`loaded` 有送達）
 - [ ] 進第 1 關後 Player 收到 `gameStart`
@@ -159,7 +162,7 @@ fly-swat-rampage-gamepix.zip
 
 ## 驗證記錄（本機實跑）
 
-- `python3 verify_smoke.py`：**61 / 61 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **61 / 61**。
+- `python3 verify_smoke.py`：**62 / 62 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **62 / 62**。
 - 真 SDK（非 stub）本機模擬：
   - `?gpx_ad=success` → 過關按「下一關」播完後進第 2 關；`?gpx_ad=nofill` → 不播廣告仍進第 2 關（`{success:false}`）。
   - `?gpx_reward=success` → 關卡失敗後復活（`phase=playing`, `timeLeft=65`, `revived=true`）。
@@ -170,7 +173,7 @@ fly-swat-rampage-gamepix.zip
 ## 本機指令
 
 ```bash
-# 61 項 E2E（含 SDK stub、廣告、關卡復活、無盡續命、持久化、640×480）
+# 62 項 E2E（含 SDK stub、廣告、關卡復活、無盡續命、持久化、640×480）
 python3 verify_smoke.py
 
 # 打包並驗證 ZIP 結構

@@ -72,7 +72,7 @@ python verify_smoke.py --headed                         # 想看畫面
 python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（61 項檢查）：
+覆蓋範圍（62 項檢查）：
 
 - 版面 / 主循環 / 選關卡（5 關 + 無盡未解鎖）/ 8 武器列
 - 武器門檻 `[0,400,1000,1800,3000,4500,6500,9000]`
@@ -150,11 +150,12 @@ RESULT: PASS
 ```bash
 python3 build_gamepix.py        # dist/fly-swat-rampage-gamepix.zip（ZIP 根目錄只有 index.html）
 python3 gamepix/make_assets.py  # icon 512 / cover 1920×1080 / 5 張 1080×1920 截圖
-python3 verify_smoke.py         # 61 項，含 SDK lifecycle／廣告／關卡復活／無盡續命／640×480
+python3 verify_smoke.py         # 62 項，含 SDK lifecycle／廣告／關卡復活／無盡續命／640×480
 ```
 
 SDK 已接：`GamePixConfig = { lifecycle: 'manual' }`、`loading → loaded → gameStart`、
 `pause/resume`（停時鐘＋停音訊）、關卡之間的插頁廣告、獎勵廣告復活（關卡 +15 秒；無盡容錯歸零並收回當次排行；每局一次）。
+廣告只在真正的 GamePix Player（iframe 或 gamepix.com）啟用；GitHub Pages 公開 demo 不會呼叫，避免 SDK 在非 Player 模擬假廣告；本機測試加 `?gpx_ads=1`。
 語言：`navigator.language` 為 `zh*` 顯示中文，其餘一律英文。上架欄位與合規自查見 `GAMEPIX_SUBMISSION.md`。
 
 ## 發佈到 GitHub Pages
