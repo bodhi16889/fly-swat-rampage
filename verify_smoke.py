@@ -3,7 +3,8 @@
 
 涵蓋：100 關（5 章 × 20 關、難度遞增、Boss 每 10 關）、20 把武器（前 8 把機制、
 後 12 把新機制：三連/音波/誘餌/磁力/火箭/無人機/全域/冰凍/火焰/冰霧/電網/電漿）、
-防禦關、蜜蜂/突風、Boss 二階段、無盡模式、廣告復活/續命、持久化、手機與 640×480。
+防禦關、蜜蜂/突風、Boss 二階段、無盡模式、廣告復活/續命、持久化、本機 PB/排行、
+全球榜（mock API：上傳/排序/復活分榜/訪客/離線 fallback）、手機與 640×480。
 
 時間判定一律用 wait_for_function 等狀態，不用固定 sleep：
 headless + SwiftShader 前 1–2 秒只有 1–2 fps，睡眠會量到暖機或舊座標。
@@ -15,15 +16,19 @@ from __future__ import annotations
 import argparse
 import functools
 import http.server
+import json
 import socketserver
 import sys
 import threading
 import time
+import urllib.request
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / "server"))
+import mock_server  # noqa: E402  (local mock API used by the global-board tests)
 ART = ROOT / "artifacts"
 FAILS: list[str] = []
 
@@ -77,6 +82,22 @@ def main() -> int:
         server = serve(ROOT, args.port)
         url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
         print(f"serving {ROOT} on {url}")
+
+    lb_server = mock_server.start(0)
+    lb_url = f"http://127.0.0.1:{lb_server.server_address[1]}"
+    print(f"mock leaderboard on {lb_url}")
+
+    def lb_reset() -> None:
+        req = urllib.request.Request(lb_url + "/v1/reset", data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5).read()
+
+    def lb_post(uid: str, body: dict) -> dict:
+        req = urllib.request.Request(
+            lb_url + "/v1/scores", data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json", "Authorization": "Bearer test-" + uid},
+        )
+        return json.loads(urllib.request.urlopen(req, timeout=5).read())
 
     errors: list[str] = []
 
@@ -694,6 +715,120 @@ def main() -> int:
         time.sleep(0.8)
         page.screenshot(path=str(ART / "fly-v5-desktop.png"))
 
+        # ---------- 12b. 全球排行榜（前端 + 本機 mock API） ----------
+        types = page.evaluate("Object.keys(__game.LEVELS).map(n => [Number(n), __game.LEVELS[n].goal.type])")
+        mismatch = [n for n, tp in types if mock_server.goal_type(n) != tp]
+        check("全球榜：100 關排名型別與後端一致",
+              len(types) == 100 and not mismatch, str(mismatch[:5]))
+
+        page.evaluate("__game.showStart()")
+        off = page.evaluate("({enabled: __game.lb.enabled, button: !!document.getElementById('btnGlobal')})")
+        check("全球榜預設關閉：沒有入口、不初始化連線",
+              off["enabled"] is False and off["button"] is False, str(off))
+
+        nourl_ctx = browser.new_context(locale="en-US")
+        np = nourl_ctx.new_page()
+        np.goto(url + "?lb=on", wait_until="load")
+        np.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        nourl = np.evaluate("({enabled: __game.lb.enabled, button: !!document.getElementById('btnGlobal'),"
+                            " url: __game.lbConfig.url})")
+        check("全球榜：LB_URL 未填時 ?lb=on 也不會連網",
+              nourl["enabled"] is False and nourl["button"] is False and not nourl["url"], str(nourl))
+        nourl_ctx.close()
+
+        off_ctx = browser.new_context(locale="en-US")
+        op = off_ctx.new_page()
+        op.goto(url + "?lb=off&lb_url=" + lb_url + "&lb_token=test-alice", wait_until="load")
+        op.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        forced = op.evaluate("({enabled: __game.lb.enabled, button: !!document.getElementById('btnGlobal')})")
+        check("全球榜：?lb=off 可強制關閉（即使有 LB_URL）",
+              forced["enabled"] is False and forced["button"] is False, str(forced))
+        off_ctx.close()
+
+        lb_reset()
+        gctx = browser.new_context(locale="en-US")
+        gp = gctx.new_page()
+        gp.on("pageerror", lambda e: errors.append(f"pageerror(global): {e}"))
+        gp.goto(url + "?lb=on&lb_url=" + lb_url + "&lb_token=test-alice", wait_until="load")
+        gp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        on = gp.evaluate("({enabled: __game.lb.enabled, button: !!document.getElementById('btnGlobal')})")
+        check("全球榜：?lb=on 才啟用並顯示入口", on["enabled"] and on["button"], str(on))
+
+        gp.evaluate("__game.startLevel(1); __game.addScore(500 - __game.state.levelScore)")
+        gp.wait_for_function("__game.state.phase === 'won'", timeout=5_000)
+        gp.wait_for_function("__game.lb.lastResult && __game.lb.lastResult.status === 'ok'", timeout=10_000)
+        sent = gp.evaluate("({res: __game.lb.lastResult,"
+                           " ui: document.getElementById('globalResult').textContent.trim()})")
+        check("全球送分：成功寫入並顯示名次",
+              sent["res"]["rank"] == 1 and "Global #1" in sent["ui"], str(sent))
+
+        lb_post("bob", {"level": 1, "value": 900, "timeMs": 1000,
+                        "misses": 0, "revived": 0, "name": "Bob"})
+        gp.evaluate("__game.showGlobalLevel(1, 0)")
+        gp.wait_for_function("document.querySelectorAll('#globalList .brow').length >= 2", timeout=10_000)
+        rows = gp.evaluate("[...document.querySelectorAll('#globalList .brow')]"
+                           ".map(x => x.textContent.replace(/\s+/g, ' ').trim())")
+        me = gp.evaluate("document.getElementById('globalMe').textContent.trim()")
+        check("全球榜：分數排序、標記自己",
+              "Bob" in rows[0] and "Alice" in rows[1] and "you" in me, f"{rows} / {me}")
+
+        gp.evaluate("__game.startLevel(1); __game.state.revived = true;"
+                    " __game.addScore(700 - __game.state.levelScore)")
+        gp.wait_for_function("__game.lb.lastResult && __game.lb.lastResult.revived === 1"
+                             " && __game.lb.lastResult.status === 'ok'", timeout=10_000)
+        gp.evaluate("__game.showGlobalLevel(1, 1)")
+        gp.wait_for_function("document.querySelectorAll('#globalList .brow').length >= 1", timeout=10_000)
+        assisted = gp.evaluate("[...document.querySelectorAll('#globalList .brow')]"
+                               ".map(x => x.textContent.replace(/\s+/g, ' ').trim())")
+        gp.evaluate("__game.showGlobalLevel(1, 0)")
+        gp.wait_for_function("document.querySelectorAll('#globalList .brow').length >= 2", timeout=10_000)
+        normal = gp.evaluate("document.querySelectorAll('#globalList .brow').length")
+        check("全球榜：復活成績分榜、不污染一般榜",
+              len(assisted) == 1 and "revived" in assisted[0] and normal == 2,
+              f"{assisted} / normal={normal}")
+
+        gp.evaluate("__game.showGlobalBoard(1)")
+        check("全球榜：章節 20 關入口",
+              gp.evaluate("document.querySelectorAll('.brow[data-glevel]').length") == 20)
+        gctx.close()
+
+        guest_ctx = browser.new_context(locale="en-US")
+        guest = guest_ctx.new_page()
+        guest.on("pageerror", lambda e: errors.append(f"pageerror(guest): {e}"))
+        guest.goto(url + "?lb=on&lb_url=" + lb_url, wait_until="load")
+        guest.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        guest.evaluate("__game.startLevel(1); __game.addScore(500 - __game.state.levelScore)")
+        guest.wait_for_function("__game.state.phase === 'won'", timeout=5_000)
+        guest.wait_for_function("__game.lb.lastResult && __game.lb.lastResult.status === 'guest'", timeout=15_000)
+        gres = guest.evaluate("({res: __game.lb.lastResult, auth: !!__game.lb.auth,"
+                              " ui: document.getElementById('globalResult').textContent.trim()})")
+        check("全球榜：訪客可玩、不上傳、提示登入",
+              gres["res"]["status"] == "guest" and not gres["auth"] and "Sign in" in gres["ui"],
+              str(gres))
+        guest.evaluate("__game.showGlobalLevel(1, 0)")
+        guest.wait_for_function("document.querySelectorAll('#globalList .brow').length >= 2", timeout=10_000)
+        gboard = guest.evaluate("({login: !!document.getElementById('btnGlobalLogin'),"
+                                " me: document.getElementById('globalMe').textContent.trim()})")
+        check("全球榜：訪客看得到榜、有登入入口",
+              gboard["login"] and "Sign in" in gboard["me"], str(gboard))
+        guest_ctx.close()
+
+        fail_ctx = browser.new_context(locale="en-US")
+        fp = fail_ctx.new_page()
+        ferrs: list[str] = []
+        fp.on("pageerror", lambda e: ferrs.append(str(e)))
+        fp.goto(url + "?lb=on&lb_url=http://127.0.0.1:1&lb_token=test-cara", wait_until="load")
+        fp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        fp.evaluate("__game.startLevel(1); __game.addScore(500 - __game.state.levelScore)")
+        fp.wait_for_function("__game.state.phase === 'won'", timeout=5_000)
+        fp.wait_for_function("__game.lb.lastResult && __game.lb.lastResult.status === 'error'", timeout=15_000)
+        fail = fp.evaluate("({ui: document.getElementById('globalResult').textContent.trim(),"
+                           " pb: !!__game.bests['1'], res: __game.lb.lastResult})")
+        check("全球榜失敗：本機 PB 保留、顯示離線、不丟例外",
+              fail["res"]["status"] == "error" and fail["pb"] and "unavailable" in fail["ui"] and not ferrs,
+              str(fail))
+        fail_ctx.close()
+
         # ---------- 13. 手機（Pixel 5） ----------
         mctx = browser.new_context(**dict(p.devices["Pixel 5"]))
         mp = mctx.new_page()
@@ -765,6 +900,7 @@ def main() -> int:
 
         browser.close()
 
+    lb_server.shutdown()
     if server:
         server.shutdown()
 
@@ -778,7 +914,7 @@ def main() -> int:
     if FAILS:
         print(f"RESULT: FAIL ({len(FAILS)}: {', '.join(FAILS)})")
         return 1
-    print("RESULT: PASS (100 關 / 20 武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / GamePix SDK / 手機 / 640×480)")
+    print("RESULT: PASS (100 關 / 20 武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / 本機 PB / 全球榜 / GamePix SDK / 手機 / 640×480)")
     return 0
 
 

@@ -4,7 +4,7 @@
 直向滿版（`viewport-fit=cover` + `touch-action: none`），手機瀏覽器打開就能玩。
 
 > 🌐 線上版：<https://bodhi16889.github.io/fly-swat-rampage/>
-> 🎮 GamePix 上架包：`dist/fly-swat-rampage-gamepix.zip`（ZIP 根目錄即 `index.html`，約 137 KB）；
+> 🎮 GamePix 上架包：`dist/fly-swat-rampage-gamepix.zip`（ZIP 根目錄即 `index.html`，約 140 KB）；
 > 素材在 `gamepix/assets/`；填表文案與合規自查見 [`GAMEPIX_SUBMISSION.md`](GAMEPIX_SUBMISSION.md)。
 > 另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)
 
@@ -23,7 +23,16 @@
 - **每關 PB**：通關自動記錄。分數關比分數；擊殺／Boss 比通關時間；防禦關比剩餘衛生度；平手比失誤。成績會標記是否用過復活。
 - **本機排行榜**：選單「🏆 本機排行」→ 當前章節 20 關一覽 → 點關卡看前 5 名；同一裝置可用不同暱稱上榜。
 - **語系**：抓系統語系（`zh*` 繁體中文、其餘英文），選單可手動切換（🌐）並記住；`?lang=zh|en` 供測試覆寫。
-- 全部存在 `localStorage`：`fly.swat.profile`（暱稱）、`fly.swat.best`（每關前 5）、`fly.swat.lang`（語言）；**沒有後端、沒有跨裝置排行**。
+- 本機資料存在 `localStorage`：`fly.swat.profile`（暱稱）、`fly.swat.best`（每關前 5）、`fly.swat.lang`（語言）；本機榜沒有後端。
+- 另有**選用**的全球每關排行（見下節），預設關閉，不影響本機玩法。
+
+## 全球每關排行（選用，預設關閉）
+
+- 後端：`server/`（Cloudflare Worker + D1 + GamePix Game Token 驗證），部署步驟見 `server/README.md`。
+- 前端：`?lb=on` 才啟用；預設 `?lb=off`／不帶參數＝完全沒有 UI、不連網。
+- 只有 **GamePix 登入玩家**能上傳（身分取 JWT `sub`）；訪客可玩、可看榜、不能上傳。
+- 一般榜與「含復活」榜分開；排序規則與本機 PB 相同。
+- 上線前先向 GamePix support 確認自家 API 的申報方式；未確認前保持 `LB_ENABLED_DEFAULT = false`。
 
 ## 武器（V5：20 把）
 
@@ -81,7 +90,7 @@ python3 -m http.server 8099
 # http://127.0.0.1:8099/index.html
 ```
 
-> 直接開 `file://` 也能跑：沒有外部圖檔／音檔、沒有 fetch。
+> 直接開 `file://` 也能跑：沒有外部圖檔／音檔；預設沒有 fetch，只有 `?lb=on` 且 `LB_URL` 有值才會連排行榜。
 > 手機測試：`ipconfig getifaddr en0`（macOS）→ 手機開 `http://<IP>:8099/index.html`。
 
 ## 驗證（Playwright，可重跑）
@@ -94,7 +103,7 @@ python3 verify_smoke.py --headed           # 想看畫面
 python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（85 項檢查）：
+覆蓋範圍（97 項檢查）：
 
 - 版面 / 主循環 / 暖機後 fps
 - 選單：100 關、5 章 × 20 格、20 武器、四種目標型別、無盡未解鎖
@@ -109,6 +118,7 @@ python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage
 - 每關 PB：通關記錄、較高分刷新、較差分不覆蓋、結果畫面顯示
 - 本機排行：章節 20 關列表、單關前 5、同裝置多暱稱
 - 語言切換：英文介面按 🌐 切中文、存 localStorage、重載生效
+- 全球榜：100 關型別與後端一致、預設關閉、上傳/名次、排序與自己標記、復活分榜、章節 20 關、訪客不可上傳、API 失敗 fallback
 - GamePix SDK：manual lifecycle、pause/resume、插頁廣告時機、關卡復活＋無盡續命、無 SDK 退路
 - 語系：英文預設、`zh` 中文
 - 640×480 iframe、Pixel 5 直向、20 武器列
@@ -129,13 +139,14 @@ headless + SwiftShader 前 1–2 秒只有 1–2 fps，用睡眠會量到暖機�
 [PASS] 第 100 關解鎖無盡 / 迷你王
 [PASS] 85,000 分→20 把武器、重載保留、重置歸零
 [PASS] GamePix：插頁／復活／續命／無 SDK no-op
+[PASS] 全球榜：上傳／排序／復活分榜／訪客／離線 fallback
 [PASS] 手機 Pixel 5 / 640×480 iframe
 RESULT: PASS
 ```
 
 截圖：`artifacts/fly-v5-mobile.png`、`fly-v5-desktop.png`、`fly-v5-640x480.png`
 
-## 程式結構（都在 `index.html`）
+## 程式結構（`index.html` + 選用 `server/`）
 
 | 區塊 | 內容 |
 | :--- | :--- |
@@ -145,12 +156,13 @@ RESULT: PASS
 | 3 | `state`：分數、解鎖、陷阱、毒霧、波、誘餌、火箭、無人機、可頌、蜜蜂、突風、Combo |
 | 4 | `Fly`：遊走／停歇／定身／`eating`／偽裝／Boss 二階段／俯衝／力竭 |
 | 5 | 分數、解鎖、存檔（`fly.swat.progress`／`fly.swat.score`／`fly.swat.endless`）、暱稱（`fly.swat.profile`）、每關 PB（`fly.swat.best`）、語言（`fly.swat.lang`） |
+| 5b | 選用全球榜（`LB_URL`／`LB_ENABLED_DEFAULT`、`?lb=on|off`、`sendScore`、全球章節／單關前 50）；後端在 `server/` |
 | 6 | `attack()` 模式分派：tap／fan／hold／holdFan／trap／laser／wave／decoy／magnet／rocket／drone／screen → `damageFly` |
 | 7 | 粒子與特效（環、電弧、扇形、文字、閃光） |
 | 8 | 5 種程序化場景（每章共用） |
 | 9 | 蒼蠅繪製（蜜蜂、金斑偽裝、Boss 護盾／Phase 2） |
 | 10 | `update()`：生成、突風、毒霧、陷阱、波、誘餌、火箭、無人機、護盾、目標判定 |
-| 11 | HUD、章節選單（暱稱／改名／語言切換／5×20 格）、本機排行（章節＋單關前 5）、結算（PB／復活／續命） |
+| 11 | HUD、章節選單（暱稱／改名／語言切換／5×20 格）、本機排行（章節＋單關前 5）、全球排行（章節＋前 50）、結算（PB／全球名次／復活／續命） |
 | 12–14 | 輸入、繪製、啟動與 `window.__game` 測試鉤子 |
 
 測試鉤子：`startLevel(n)`、`startEndless()`、`showStart()`、`addScore(n)`、`spawnFly(x,y,type)`、
@@ -163,7 +175,7 @@ waves / decoys / rockets / drones / effects / weapon / progress / board / frame 
 ```bash
 python3 build_gamepix.py        # dist/fly-swat-rampage-gamepix.zip（根目錄只有 index.html）
 python3 gamepix/make_assets.py  # icon 512 / cover 1920×1080 / 5 張 1080×1920 截圖（另產 1 張封面主視覺）
-python3 verify_smoke.py         # 85 項
+python3 verify_smoke.py         # 97 項
 ```
 
 SDK：`GamePixConfig = { lifecycle:'manual' }`、`loading→loaded→gameStart`、`pause/resume`（停時鐘＋音訊）、
@@ -179,7 +191,8 @@ git push origin main          # 本站由 main / root 自動部署
 
 ## 已知限制
 
-- 沒有 Service Worker；排行榜是**本機**（每關前 5、同裝置多暱稱），沒有跨裝置／全球榜。
+- 沒有 Service Worker；本機榜每關前 5、同裝置多暱稱。全球榜需自行部署 `server/`，且只有登入玩家能上傳。
+- 全球榜仍無法完全防作弊（客户端回報時間／分數，只能擋離譜值）；訪客不進全球榜。
 - 改名只影響之後的成績；舊紀錄保留當時的暱稱。
 - 單點類武器取最近一隻；蜜蜂只對點擊類武器有懲罰（噴霧／雷射／波會跳過友軍）。
 - 鹽槍／火焰方向為「點擊點 → 畫面中心」。

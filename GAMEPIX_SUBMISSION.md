@@ -3,10 +3,11 @@
 單檔 HTML5（Canvas 2D）直向打蒼蠅遊戲（V5：20 武器、100 關）。已接 GamePix SDK v3（manual lifecycle），
 英文為預設語言、中文僅在 `zh*` 系統顯示。這份文件是「照著填 / 照著傳」的清單。
 
-- 遊戲本體：`index.html`（約 266 KB，零圖檔／零音檔，全部內嵌）
-- 上傳檔：`dist/fly-swat-rampage-gamepix.zip`（約 137 KB，ZIP 根目錄只有 `index.html`）
+- 遊戲本體：`index.html`（約 276 KB，零圖檔／零音檔，全部內嵌）
+- 上傳檔：`dist/fly-swat-rampage-gamepix.zip`（約 140 KB，ZIP 根目錄只有 `index.html`）
 - 素材：`gamepix/assets/`
-- 驗證：`python3 verify_smoke.py`（85 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
+- 驗證：`python3 verify_smoke.py`（97 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
+- 送審設定：`LB_URL = ''`、`LB_ENABLED_DEFAULT = false`；全球榜後端在 `server/`，**不進 ZIP**，未啟用前沒有任何額外網路請求
 
 ---
 
@@ -107,7 +108,7 @@ Bottom bar: switch between unlocked weapons.
 
 ```bash
 python3 build_gamepix.py
-# build: dist/fly-swat-rampage-gamepix.zip  137 KB
+# build: dist/fly-swat-rampage-gamepix.zip  140 KB
 # entries: ['index.html']
 # PASS: index.html 在 ZIP 根目錄、只依賴 GamePix SDK、無其他外部連結
 ```
@@ -151,7 +152,7 @@ fly-swat-rampage-gamepix.zip
 | 獎勵廣告需明示、可跳過 | ✅ | 按鈕文字寫明「+15 秒、失誤歸零、每局一次」；其他按鈕可關閉 |
 | 載入畫面 | ✅ | `#loading`，`loaded()` 後淡出 |
 | 640×480 iframe 可玩 | ✅ | Playwright 實測（選單可捲動、可進關、武器列在畫面內） |
-| 無外部連結／外部分析／第三方 SDK | ✅ | `index.html` 內唯一外部 URL 是 GamePix SDK |
+| 無外部連結／外部分析／第三方 SDK | ✅ | `index.html` 內唯一外部 URL 是 GamePix SDK；全球榜預設關閉（`LB_URL=''`、`LB_ENABLED_DEFAULT=false`），ZIP 不含 `server/` |
 | 無 Quit 按鈕 | ✅ | 選單只有關卡與開始 |
 | 不得要求旋轉裝置 | ✅ | 無此提示；直向／橫向都可玩 |
 | 語言預設英文 | ✅ | 非 `zh*` 一律英文；`zh*` 顯示繁中 |
@@ -167,7 +168,7 @@ fly-swat-rampage-gamepix.zip
 
 ## 驗證記錄（本機實跑）
 
-- `python3 verify_smoke.py`：**85 / 85 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **85 / 85**。
+- `python3 verify_smoke.py`：**97 / 97 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **96 / 96**。
 - 真 SDK（非 stub）本機模擬：
   - `?gpx_ad=success` → 過關按「下一關」播完後進第 2 關；`?gpx_ad=nofill` → 不播廣告仍進第 2 關（`{success:false}`）。
   - `?gpx_reward=success` → 關卡失敗後復活（`phase=playing`, `timeLeft=65`, `revived=true`）。
@@ -178,7 +179,7 @@ fly-swat-rampage-gamepix.zip
 ## 本機指令
 
 ```bash
-# 85 項 E2E（含 20 武器機制、100 關資料、暱稱／PB／本機排行、語言切換、SDK／廣告、640×480）
+# 97 項 E2E（含 20 武器機制、100 關資料、暱稱／PB／本機排行、全球榜 mock、語言切換、SDK／廣告、640×480）
 python3 verify_smoke.py
 
 # 打包並驗證 ZIP 結構

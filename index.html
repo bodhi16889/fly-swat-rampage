@@ -117,6 +117,12 @@
   .brow span { color: #f0e2cc; }
   .brow i { font-style: normal; color: #a9947a; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
   .pb { margin-top: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 190, 110, .1); color: #ffd166; font-size: 11px; }
+  .boardBtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .mini.global { border-color: rgba(127, 212, 255, .45); color: #bde6ff; }
+  .mini.on { background: linear-gradient(180deg, #7fd4ff, #4aa8e0); color: #0b2233; border-color: transparent; font-weight: 700; }
+  .gtabs { display: flex; gap: 6px; justify-content: center; margin: 6px 0 2px; }
+  .globalResult { margin-top: 6px; font-size: 11px; color: #9fd4ff; }
+  .brow.you { border-color: rgba(127, 212, 255, .55); background: rgba(80, 160, 255, .12); }
   .lvgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 6px 0 10px; }
   .lvcell { padding: 7px 0 6px; border-radius: 11px; display: grid; justify-items: center; gap: 0; }
   .lvcell b { font-size: 9px; color: #ffd166; }
@@ -783,6 +789,19 @@ const I18N = {
     secondsMs: '{s}s',
     bestBy: 'by {name}',
     languageSwitch: '中文',
+    globalBoard: 'Global',
+    globalTitle: '🌍 Global leaderboard',
+    globalPick: 'Pick a level to see the top 50',
+    globalLoading: 'Loading…',
+    globalError: 'Global board unavailable',
+    globalOffline: 'Global board unavailable — local result saved',
+    globalLoginHint: 'Sign in to GamePix to join the global board',
+    globalRank: 'Global #{rank}',
+    globalYou: 'you',
+    globalNormal: 'Normal',
+    globalAssisted: 'With revives',
+    globalChecking: 'Submitting to global board…',
+    globalSignIn: 'Sign in',
     boardRow: '#{i} · {s}s · combo {c}',
     levelCleared: '★',
     locked: '🔒',
@@ -896,6 +915,19 @@ const I18N = {
     secondsMs: '{s} 秒',
     bestBy: 'by {name}',
     languageSwitch: 'EN',
+    globalBoard: '全球',
+    globalTitle: '🌍 全球排行',
+    globalPick: '選一關看全球前 50 名',
+    globalLoading: '載入中…',
+    globalError: '全球排行暫時無法使用',
+    globalOffline: '全球排行暫時無法使用，本機成績已保留',
+    globalLoginHint: '登入 GamePix 才能進全球榜',
+    globalRank: '全球第 {rank} 名',
+    globalYou: '你',
+    globalNormal: '一般',
+    globalAssisted: '含復活',
+    globalChecking: '正在送出全球成績…',
+    globalSignIn: '登入',
     boardRow: '#{i} · {s} 秒 · Combo {c}',
     levelCleared: '★',
     locked: '🔒',
@@ -1385,6 +1417,133 @@ function endlessUnlocked() { return !!loadProgress()[100]; }
 function loadBoard() {
   try { return JSON.parse(localStorage.getItem(BOARD_KEY) || '[]'); } catch (e) { return []; }
 }
+/* ==================================================================== *
+ * 5b. 全球排行榜（預設關閉）
+ * --------------------------------------------------------------------
+ * 部署 server/worker.js 後，把網址填到 LB_URL，再用 ?lb=on 開啟。
+ * 沒有 ?lb=on 時完全不會連網，也不會有任何 UI，送審與離線玩法不受影響。
+ * ==================================================================== */
+const LB_URL = ''; // 部署後填入：fly-swat-lb.<your-account>.workers.dev
+/* 上架後要預設開啟時改成 true；?lb=off 仍可強制關閉，?lb=on 可強制開啟。
+   現在保持 false＝完全不出現全球榜 UI、不連網。 */
+const LB_ENABLED_DEFAULT = false;
+const LB_CONFIG = (() => {
+  const q = new URLSearchParams(location.search);
+  const localHost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const url = (localHost && q.get('lb_url')) || LB_URL;
+  const flag = q.get('lb');
+  return {
+    enabled: !!url && flag !== 'off' && (flag === 'on' || LB_ENABLED_DEFAULT),
+    url,
+    mockToken: localHost ? (q.get('lb_token') || '') : '',
+  };
+})();
+
+const LB = {
+  enabled: LB_CONFIG.enabled,
+  auth: null,
+  lastResult: null,
+
+  async authNow() {
+    if (!this.enabled) return null;
+    if (LB_CONFIG.mockToken) {
+      const id = LB_CONFIG.mockToken.replace(/^test-/, '') || 'tester';
+      this.auth = {
+        success: true, code: 200, token: LB_CONFIG.mockToken,
+        user: { id, displayName: id.charAt(0).toUpperCase() + id.slice(1), guest: false },
+      };
+      return this.auth;
+    }
+    const api = GP.api();
+    if (!api || !api.user || typeof api.user.getUser !== 'function') return null;
+    try {
+      const a = await api.user.getUser();
+      if (a && a.success && a.token) { this.auth = a; return a; }
+    } catch (e) { /* guest */ }
+    this.auth = null;
+    return null;
+  },
+
+  async ensureAuth() {
+    if (!this.auth) await this.authNow();
+    return this.auth;
+  },
+
+  async _json(res) {
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || ('http-' + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  },
+
+  async submit(entry) {
+    if (!this.enabled) return { status: 'off' };
+    let auth = this.auth || await this.authNow();
+    if (!auth || !auth.token) {
+      this.lastResult = { status: 'guest' };
+      return this.lastResult;
+    }
+    const body = {
+      level: entry.level,
+      value: entry.value,
+      timeMs: entry.timeMs,
+      misses: entry.misses,
+      revived: entry.revived ? 1 : 0,
+      name: (auth.user && auth.user.displayName) || PROFILE.name,
+    };
+    const send = async () => this._json(await fetch(LB_CONFIG.url + '/v1/scores', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + auth.token,
+      },
+      body: JSON.stringify(body),
+    }));
+    try {
+      const data = await send();
+      this.lastResult = Object.assign({ status: 'ok' }, data);
+      return this.lastResult;
+    } catch (e) {
+      if (e.status === 401) {
+        this.auth = null;
+        auth = await this.authNow();
+        if (auth && auth.token) {
+          try {
+            const data = await send();
+            this.lastResult = Object.assign({ status: 'ok' }, data);
+            return this.lastResult;
+          } catch (e2) { /* fall through */ }
+        }
+      }
+      this.lastResult = { status: 'error', message: String(e.message || e) };
+      return this.lastResult;
+    }
+  },
+
+  async board(level, revived) {
+    const headers = {};
+    if (this.auth && this.auth.token) headers.Authorization = 'Bearer ' + this.auth.token;
+    const res = await fetch(
+      `${LB_CONFIG.url}/v1/leaderboard?level=${level}&revived=${revived ? 1 : 0}&limit=50`,
+      { headers },
+    );
+    return this._json(res);
+  },
+
+  async login() {
+    const api = GP.api();
+    if (!api || !api.user || typeof api.user.requestLogin !== 'function') return null;
+    try {
+      const a = await api.user.requestLogin();
+      if (a && a.success && a.token) { this.auth = a; return a; }
+    } catch (e) { /* ignore */ }
+    return null;
+  },
+};
+
 const PROFILE_KEY = 'fly.swat.profile';
 const BEST_KEY = 'fly.swat.best';
 
@@ -1464,14 +1623,16 @@ function recordRun() {
   const value = type === 'score' ? state.levelScore
     : type === 'defend' ? Math.ceil((state.defend && state.defend.hp) || 0)
       : timeMs;
-  return recordBest(state.level, {
+  const entry = {
+    level: state.level,
     name: PROFILE.name,
     value,
     timeMs,
     misses: state.misses,
     revived: !!state.revived,
     at: Date.now(),
-  });
+  };
+  return Object.assign(recordBest(state.level, entry), { entry });
 }
 
 function removeBoardEntry(at) {
@@ -2718,6 +2879,7 @@ function showResult(win, reason, board) {
     <p>${state.endless ? t('endlessCard') : t('levelN', { n: state.level, name: lvName(state.level) })}</p>
     <div class="stats">${stats}</div>
     ${pb ? `<div class="pb">🏅 ${t('personalBest')} · <b>${metricText(pb.best, pb.type)}</b> · ${t('bestBy', { name: esc(pb.best.name) })}${pb.isNew ? ' · ' + t('newBest') : ''}</div>` : ''}
+    ${LB.enabled && pb ? `<div class="globalResult" id="globalResult">🌍 ${t('globalChecking')}</div>` : ''}
     ${boardHtml}
     <div class="btns">
       ${reviveBtn}
@@ -2727,6 +2889,7 @@ function showResult(win, reason, board) {
     </div>
     <div class="hint">${lvTip(state.endless ? 'endless' : state.level)}</div>`;
   dom.modal.classList.remove('hidden');
+  if (LB.enabled && pb) submitGlobal(pb);
 
   /* 插頁廣告只放在關卡之間（規則：不得在遊戲中或計時觸發）；
      廣告期間把結算按鈕全部鎖住，避免玩家在 Player 蓋層下誤觸兩次 */
@@ -2759,6 +2922,15 @@ function showResult(win, reason, board) {
       revive.textContent = '▶ ' + reviveLabel;
     });
   };
+}
+
+async function submitGlobal(pb) {
+  const res = await LB.submit(pb.entry);
+  const node = document.getElementById('globalResult');
+  if (!node) return;
+  if (res.status === 'ok') node.textContent = `🌍 ${t('globalRank', { rank: res.rank })}`;
+  else if (res.status === 'guest') node.textContent = `🌍 ${t('globalLoginHint')}`;
+  else node.textContent = `🌍 ${t('globalOffline')}`;
 }
 
 function reviveRun() {
@@ -2837,7 +3009,10 @@ function showStart() {
     </div>
     <div class="chapters">${chapBtns}</div>
     <div class="chapterInfo"><span>${LANG === 'zh' ? chapter.name : chapter.name_en} · ${chapCleared}/20</span>
-      <button id="btnBoard" class="mini">🏆 ${t('localBoard')}</button></div>
+      <span class="boardBtns">
+        <button id="btnBoard" class="mini">🏆 ${t('localBoard')}</button>
+        ${LB.enabled ? `<button id="btnGlobal" class="mini global">🌍 ${t('globalBoard')}</button>` : ''}
+      </span></div>
     <div class="lvgrid">${cells}</div>
     <button class="lv endless${endlessUnlocked() ? '' : ' locked'}" id="btnEndlessMenu" ${endlessUnlocked() ? '' : 'disabled'}>
       <b>${endlessUnlocked() ? t('endlessCard') : t('endlessLocked')}</b><span>${t('endlessSub')}</span></button>
@@ -2854,6 +3029,8 @@ function showStart() {
     location.reload();
   };
   document.getElementById('btnBoard').onclick = () => showBoard(chap);
+  const globalBtn = document.getElementById('btnGlobal');
+  if (globalBtn) globalBtn.onclick = () => showGlobalBoard(chap);
   dom.card.querySelectorAll('.chtab').forEach((btn) => {
     if (btn.disabled) return;
     btn.onclick = () => { state.menuChapter = +btn.dataset.chap; showStart(); };
@@ -2933,6 +3110,92 @@ function showBoardLevel(n) {
     <div class="btns"><button id="btnBoardBack" class="primary">${t('back')}</button></div>`;
   dom.modal.classList.remove('hidden');
   document.getElementById('btnBoardBack').onclick = () => showBoard(state.menuChapter);
+}
+
+function showGlobalBoard(chapter) {
+  if (!LB.enabled) return;
+  state.phase = 'menu';
+  state.endless = false;
+  const chap = clamp(chapter || state.menuChapter || 1, 1, CHAPTERS.length);
+  state.menuChapter = chap;
+  const c = CHAPTERS[chap - 1];
+  const rows = Array.from({ length: 20 }, (_, i) => {
+    const n = (chap - 1) * 20 + i + 1;
+    return `<button class="brow" data-glevel="${n}">
+      <b>${n}</b><span>${lvName(n)}</span><i>🌍</i></button>`;
+  }).join('');
+  dom.card.innerHTML = `
+    <h2>${t('globalTitle')}</h2>
+    <p>${LANG === 'zh' ? c.name : c.name_en} · ${t('globalPick')}</p>
+    <div class="boardList">${rows}</div>
+    <div class="btns"><button id="btnGlobalBack" class="primary">${t('back')}</button></div>`;
+  dom.modal.classList.remove('hidden');
+  document.getElementById('btnGlobalBack').onclick = () => showStart();
+  dom.card.querySelectorAll('.brow[data-glevel]').forEach((btn) => {
+    btn.onclick = () => showGlobalLevel(+btn.dataset.glevel, 0);
+  });
+}
+
+function showGlobalLevel(n, revived = 0) {
+  if (!LB.enabled) return;
+  state.globalLevel = n;
+  state.globalRevived = revived ? 1 : 0;
+  const type = LEVELS[n].goal.type;
+  const tab = (v, label) => `<button class="mini ${revived === v ? 'on' : ''}" data-gtab="${v}">${label}</button>`;
+  dom.card.innerHTML = `
+    <h2>${t('globalTitle')}</h2>
+    <p>${t('levelShort', { n })} · ${lvName(n)}</p>
+    <div class="gtabs">${tab(0, t('globalNormal'))}${tab(1, t('globalAssisted'))}</div>
+    <div id="globalList" class="boardList"><p class="hint">${t('globalLoading')}</p></div>
+    <div id="globalMe" class="hint"></div>
+    <div class="btns"><button id="btnGlobalLevelBack" class="primary">${t('back')}</button></div>`;
+  dom.modal.classList.remove('hidden');
+  document.getElementById('btnGlobalLevelBack').onclick = () => showGlobalBoard(state.menuChapter);
+  dom.card.querySelectorAll('[data-gtab]').forEach((btn) => {
+    btn.onclick = () => showGlobalLevel(n, +btn.dataset.gtab);
+  });
+  loadGlobalLevel(n, revived ? 1 : 0, type);
+}
+
+async function loadGlobalLevel(n, revived, type) {
+  const box = document.getElementById('globalList');
+  if (!box) return;
+  let auth = null;
+  try {
+    auth = await LB.ensureAuth();
+    const data = await LB.board(n, revived);
+    if (!document.getElementById('globalList')) return;
+    const rows = data.rows || [];
+    box.innerHTML = rows.length
+      ? rows.map((e, i) => `<div class="brow static${e.you ? ' you' : ''}">
+          <b>#${i + 1}</b>
+          <span>${metricText(e, type)}${e.revived ? ` <i>(${t('revivedTag')})</i>` : ''}</span>
+          <i>${esc(e.name)}${e.you ? ` · ${t('globalYou')}` : ''}</i></div>`).join('')
+      : `<p class="hint">${t('noRecord')}</p>`;
+    const me = document.getElementById('globalMe');
+    if (!me) return;
+    if (data.me && data.me.rank) {
+      me.textContent = `${t('globalYou')} · #${data.me.rank}`;
+    } else if (!auth) {
+      me.innerHTML = `<button id="btnGlobalLogin" class="mini">${t('globalSignIn')}</button> ${t('globalLoginHint')}`;
+      const login = document.getElementById('btnGlobalLogin');
+      if (login) login.onclick = async () => {
+        await LB.login();
+        showGlobalLevel(n, revived);
+      };
+    } else {
+      me.textContent = t('noRecord');
+    }
+  } catch (e) {
+    if (box) box.innerHTML = `<p class="hint">${t('globalError')}</p>`;
+    const me = document.getElementById('globalMe');
+    if (me) me.innerHTML = auth ? '' : `<button id="btnGlobalLogin" class="mini">${t('globalSignIn')}</button> ${t('globalLoginHint')}`;
+    const login = document.getElementById('btnGlobalLogin');
+    if (login) login.onclick = async () => {
+      await LB.login();
+      showGlobalLevel(n, revived);
+    };
+  }
 }
 
 /* ==================================================================== *
@@ -3160,7 +3423,11 @@ window.__game = {
   showStart,
   showBoard,
   showBoardLevel,
+  showGlobalBoard,
+  showGlobalLevel,
   renderRename,
+  lb: LB,
+  lbConfig: LB_CONFIG,
   addScore,
   spawnFly: (x, y, type) => {
     const f = new Fly(type || 'house', { x, y });
