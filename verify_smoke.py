@@ -726,16 +726,6 @@ def main() -> int:
         check("全球榜預設關閉：沒有入口、不初始化連線",
               off["enabled"] is False and off["button"] is False, str(off))
 
-        nourl_ctx = browser.new_context(locale="en-US")
-        np = nourl_ctx.new_page()
-        np.goto(url + "?lb=on", wait_until="load")
-        np.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
-        nourl = np.evaluate("({enabled: __game.lb.enabled, button: !!document.getElementById('btnGlobal'),"
-                            " url: __game.lbConfig.url})")
-        check("全球榜：LB_URL 未填時 ?lb=on 也不會連網",
-              nourl["enabled"] is False and nourl["button"] is False and not nourl["url"], str(nourl))
-        nourl_ctx.close()
-
         off_ctx = browser.new_context(locale="en-US")
         op = off_ctx.new_page()
         op.goto(url + "?lb=off&lb_url=" + lb_url + "&lb_token=test-alice", wait_until="load")

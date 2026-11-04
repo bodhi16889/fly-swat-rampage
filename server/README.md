@@ -1,6 +1,13 @@
 # 全球每關排行榜後端（Cloudflare Worker + D1）
 
-前端在 `index.html`，這個目錄只放後端。**預設不啟用**：`LB_URL` 空字串時，`?lb=on` 也不會連網、不會出現 UI，送審與離線玩法完全不受影響。
+前端在 `index.html`，這個目錄只放後端。**預設不啟用**：`LB_ENABLED_DEFAULT=false` 時沒有 UI、也不會連網，送審與離線玩法不受影響。
+
+目前部署（2026-11-04）：
+
+- Worker：`https://fly-swat-lb.chenkaiting18.workers.dev`
+- Game ID：`T77784`（JWT `aud=gpx:game:T77784`）
+- D1：`fly-swat-lb` / `3721bb05-932b-4b51-8eca-7e9ea7f8b0be`
+- 前端 `LB_URL` 已填；`LB_ENABLED_DEFAULT=false`，用 `?lb=on` 測試。
 
 ## 1. 資料流
 

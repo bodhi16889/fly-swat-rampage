@@ -28,7 +28,7 @@
 
 ## 全球每關排行（選用，預設關閉）
 
-- 後端：`server/`（Cloudflare Worker + D1 + GamePix Game Token 驗證），部署步驟見 `server/README.md`。
+- 後端：`server/`（Cloudflare Worker + D1 + GamePix Game Token 驗證），已部署在 `https://fly-swat-lb.chenkaiting18.workers.dev`；部署步驟見 `server/README.md`。
 - 前端：`?lb=on` 才啟用；預設 `?lb=off`／不帶參數＝完全沒有 UI、不連網。
 - 只有 **GamePix 登入玩家**能上傳（身分取 JWT `sub`）；訪客可玩、可看榜、不能上傳。
 - 一般榜與「含復活」榜分開；排序規則與本機 PB 相同。
@@ -103,7 +103,7 @@ python3 verify_smoke.py --headed           # 想看畫面
 python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（97 項檢查）：
+覆蓋範圍（96 項檢查）：
 
 - 版面 / 主循環 / 暖機後 fps
 - 選單：100 關、5 章 × 20 格、20 武器、四種目標型別、無盡未解鎖
@@ -175,7 +175,7 @@ waves / decoys / rockets / drones / effects / weapon / progress / board / frame 
 ```bash
 python3 build_gamepix.py        # dist/fly-swat-rampage-gamepix.zip（根目錄只有 index.html）
 python3 gamepix/make_assets.py  # icon 512 / cover 1920×1080 / 5 張 1080×1920 截圖（另產 1 張封面主視覺）
-python3 verify_smoke.py         # 97 項
+python3 verify_smoke.py         # 96 項
 ```
 
 SDK：`GamePixConfig = { lifecycle:'manual' }`、`loading→loaded→gameStart`、`pause/resume`（停時鐘＋音訊）、

@@ -1,5 +1,6 @@
 name = "fly-swat-lb"
 main = "worker.js"
+account_id = "b62019cb0250535587fcca5b9698daec"
 compatibility_date = "2026-10-01"
 
 # 1) npx wrangler d1 create fly-swat-lb
@@ -9,10 +10,10 @@ compatibility_date = "2026-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "fly-swat-lb"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "3721bb05-932b-4b51-8eca-7e9ea7f8b0be"
 
 [vars]
-GAMEPIX_GAME_ID = "REPLACE_WITH_GAMEPIX_GAME_ID"
+GAMEPIX_GAME_ID = "T77784"
 
 # Optional: point at a local JWKS during tests.
 # JWKS_URL = "http://127.0.0.1:8788/.well-known/jwks.json"

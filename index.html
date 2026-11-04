@@ -1423,7 +1423,7 @@ function loadBoard() {
  * 部署 server/worker.js 後，把網址填到 LB_URL，再用 ?lb=on 開啟。
  * 沒有 ?lb=on 時完全不會連網，也不會有任何 UI，送審與離線玩法不受影響。
  * ==================================================================== */
-const LB_URL = ''; // 部署後填入：fly-swat-lb.<your-account>.workers.dev
+const LB_URL = 'https://fly-swat-lb.chenkaiting18.workers.dev'; // 自家排行榜 API（預設關閉）
 /* 上架後要預設開啟時改成 true；?lb=off 仍可強制關閉，?lb=on 可強制開啟。
    現在保持 false＝完全不出現全球榜 UI、不連網。 */
 const LB_ENABLED_DEFAULT = false;

@@ -4,7 +4,7 @@
 規則：
   - ZIP 根目錄必須直接是 index.html（不能多一層資料夾）
   - 只放遊戲本體（index.html）；README、測試、素材、git 都不進包
-  - 唯一允許的外部資源是 GamePix SDK
+  - 允許的外部資源：GamePix SDK、自家排行榜 API（預設關閉）
 
     python3 build_gamepix.py
 """
@@ -19,7 +19,10 @@ ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "index.html"
 DIST = ROOT / "dist"
 ZIP = DIST / "fly-swat-rampage-gamepix.zip"
-ALLOWED_HOST = "integration.gamepix.com"
+ALLOWED_HOSTS = {
+    "integration.gamepix.com",
+    "fly-swat-lb.chenkaiting18.workers.dev",  # 自家排行榜 API，預設關閉
+}
 
 
 def main() -> int:
@@ -37,7 +40,7 @@ def main() -> int:
     for m in re.finditer(r"https?://[^\"' )]+", html):
         url = m.group(0)
         host = re.sub(r"^https?://", "", url).split("/")[0]
-        if host != ALLOWED_HOST:
+        if host not in ALLOWED_HOSTS:
             problems.append(f"外部資源不在白名單：{url}")
 
     DIST.mkdir(exist_ok=True)
@@ -60,7 +63,7 @@ def main() -> int:
         for p in problems:
             print("  -", p)
         return 1
-    print("PASS: index.html 在 ZIP 根目錄、只依賴 GamePix SDK、無其他外部連結")
+    print("PASS: index.html 在 ZIP 根目錄、外部資源只有 GamePix SDK 與自家排行榜 API")
     return 0
 
 
