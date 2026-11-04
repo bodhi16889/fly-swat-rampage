@@ -70,11 +70,28 @@ def main() -> int:
 
         # 01 選關卡（用「全破」存檔：★ 與無盡解鎖，比全鎖畫面好看）
         page.evaluate("""(() => {
-          for (let i = 1; i <= 5; i++) __game.saveProgress(i);
-          __game.addScore(9000 - __game.state.score);
+          for (let i = 1; i <= 100; i++) __game.saveProgress(i);
+          __game.addScore(85000 - __game.state.score);
+          __game.state.menuChapter = 1;
           __game.showStart();
         })()""")
         shot(page, SHOTS / "01-menu.png", 0.5)
+
+        # 00 封面用主視覺：第 1 關客廳、電蚊拍電弧
+        page.evaluate("""(() => {
+          __game.startLevel(1, true);
+          __game.addScore(1800);
+          __game.state.weaponIndex = 3;
+          const w = innerWidth, h = innerHeight;
+          for (let i = 0; i < 5; i++) __game.spawnFly(w * 0.5 + (i - 2) * 44, h * 0.55 + (i % 2) * 34, 'house');
+          __game.state.cool = 0;
+          __game.attack(w * 0.5, h * 0.55);
+          __game.gp.pause('shot');
+          document.getElementById('toast').classList.remove('show');
+        })()""")
+        page.wait_for_function("getComputedStyle(document.getElementById('modal')).opacity === '0'", timeout=5_000)
+        shot(page, SHOTS / "00-hero.png", 0.25)
+        page.evaluate("__game.gp.resume('shot')")
 
         # 02 第 2 關：電蚊拍連鎖（先觸發特效再凍結畫面截圖）
         page.evaluate("""(() => {
@@ -94,7 +111,7 @@ def main() -> int:
 
         # 03 第 3 關：麵包店防禦（蒼蠅在吃可頌）
         page.evaluate("""(() => {
-          __game.startLevel(3);
+          __game.startLevel(41);
           for (let i = 0; i < 3; i++) __game.spawnFly(innerWidth * .5, innerHeight * .45, 'gold');
         })()""")
         page.wait_for_function("getComputedStyle(document.getElementById('modal')).opacity === '0'", timeout=5_000)
@@ -102,9 +119,9 @@ def main() -> int:
 
         # 04 第 5 關：蠅王 + 護盾 + 雷射光束（凍結）
         page.evaluate("""(() => {
-          __game.addScore(9000 - __game.state.score);
+          __game.addScore(85000 - __game.state.score);
           __game.state.weaponIndex = 7;
-          __game.startLevel(5);
+          __game.startLevel(10);
           __game.forceSummon();
           __game.state.cool = 0;
           __game.attack(innerWidth / 2, __game.boss.y);
@@ -117,7 +134,7 @@ def main() -> int:
 
         # 05 無盡模式：全武器解鎖 + 密集蟲群
         page.evaluate("""(() => {
-          __game.addScore(9000 - __game.state.score);
+          __game.addScore(85000 - __game.state.score);
           __game.state.weaponIndex = 7;
           __game.startEndless();
           for (let i = 0; i < 14; i++) {

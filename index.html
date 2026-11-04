@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#14100c" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>打擊蒼蠅大作戰 V4 · Fly Swat Rampage</title>
+<title>打擊蒼蠅大作戰 V5 · Fly Swat Rampage</title>
 <!-- GamePix SDK v3：必須先設 config 再載入 SDK（manual lifecycle 才有載入進度與 gameStart 訊號） -->
 <script>window.GamePixConfig = { lifecycle: 'manual' };</script>
 <script src="https://integration.gamepix.com/sdk/v3/gamepix.sdk.js"></script>
@@ -80,9 +80,11 @@
   /* ---------- weapon bar ---------- */
   #weaponbar {
     position: fixed; left: 0; right: 0; bottom: max(10px, env(safe-area-inset-bottom));
-    display: flex; justify-content: center; align-items: flex-end; flex-wrap: wrap;
-    gap: 4px; row-gap: 4px; padding: 0 6px; pointer-events: none;
+    display: flex; justify-content: flex-start; align-items: flex-end; flex-wrap: nowrap;
+    gap: 4px; padding: 0 8px 4px; pointer-events: auto; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
+  #weaponbar::-webkit-scrollbar { display: none; }
   #combo {
     position: fixed; left: 50%; top: 26%; transform: translate(-50%, -50%) scale(.9);
     font: 800 20px/1 system-ui, sans-serif; letter-spacing: .06em;
@@ -93,6 +95,20 @@
   #bossWrap.defend #bossName { color: #a9f0b0; }
   #bossWrap.defend #bossBar { background: linear-gradient(90deg, #57c777, #b8f0a0); }
   #bossWrap.defend #bossTrack { border-color: rgba(140, 220, 150, .5); background: rgba(120, 220, 140, .14); }
+  .chapters { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; margin: 12px 0 4px; }
+  .chtab {
+    padding: 6px 9px; border-radius: 10px; font-size: 10px; letter-spacing: 0;
+    display: grid; gap: 1px; color: #e8d6bd;
+  }
+  .chtab small { font-size: 8px; color: #a9947a; }
+  .chtab.active { background: linear-gradient(180deg, #ffb347, #ef8c2e); color: #2a1706; border-color: transparent; font-weight: 700; }
+  .chtab.active small { color: #5a3a14; }
+  .chapterInfo { font-size: 10px; color: #a9947a; margin: 4px 0 6px; letter-spacing: .08em; }
+  .lvgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 6px 0 10px; }
+  .lvcell { padding: 7px 0 6px; border-radius: 11px; display: grid; justify-items: center; gap: 0; }
+  .lvcell b { font-size: 9px; color: #ffd166; }
+  .lvcell span { font-size: 13px; font-weight: 700; }
+  .lvcell.locked { opacity: .38; }
   .levels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 6px; }
   .levels .lv, .lv.endless {
     text-align: left; padding: 9px 10px; border-radius: 12px;
@@ -107,7 +123,7 @@
   .board .bt { font-size: 11px; letter-spacing: .1em; color: #ffd166; margin-bottom: 4px; }
   .board div { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255, 200, 140, .15); padding: 2px 0; }
   .wbtn {
-    pointer-events: auto; width: 42px; padding: 5px 2px 4px; text-align: center;
+    pointer-events: auto; flex: 0 0 46px; width: 46px; padding: 5px 1px 4px; text-align: center;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
     color: #cbb79c; font-size: 7.5px; line-height: 1.2; backdrop-filter: blur(4px);
     transition: transform .12s, border-color .12s, color .12s;
@@ -490,6 +506,19 @@ const WEAPONS = [
   { id: 'spray', name: '強效殺蟲噴霧', short: '噴霧', icon: '🧴', unlock: 4500, radius: 160, cooldown: 0.20, mode: 'hold', branch: 'area', tick: 0.3, tickDamage: 1 },
   { id: 'twin', name: '雙持高壓電蚊拍', short: '雙拍', icon: '⚡⚡', unlock: 6500, radius: 90, cooldown: 0.15, mode: 'tap', damage: 1, aoe: true, twin: true, branch: 'area' },
   { id: 'laser', name: '終極除蟲雷射炮', short: '雷射', icon: '🔫', unlock: 9000, radius: 0, cooldown: 0.80, mode: 'laser', band: 40, damage: 99, bossDamage: 8, pierce: true, branch: 'area' },
+  /* --- V5：第二梯隊（12 把，機制不重複只調數值） --- */
+  { id: 'net', name: '高壓電擊網', short: '電網', icon: '🕸️', unlock: 12000, radius: 150, cooldown: 0.35, mode: 'tap', damage: 1, aoe: true, chain: 3, branch: 'area' },
+  { id: 'cryo', name: '急凍噴射器', short: '冰霧', icon: '❄️', unlock: 15500, radius: 170, cooldown: 0.25, mode: 'hold', branch: 'area', tick: 0.25, tickDamage: 1, freeze: 0.8 },
+  { id: 'triple', name: '三連蒼蠅拍', short: '三連', icon: '🏓', unlock: 19500, radius: 65, cooldown: 0.30, mode: 'tap', damage: 1, aoe: true, triple: true, branch: 'precise' },
+  { id: 'sonic', name: '音波震盪器', short: '音波', icon: '🔊', unlock: 24000, radius: 230, cooldown: 0.60, mode: 'wave', damage: 1, branch: 'area' },
+  { id: 'decoy', name: '誘餌陷阱', short: '誘餌', icon: '🍯', unlock: 29000, radius: 160, cooldown: 2.40, mode: 'decoy', damage: 2, branch: 'precise' },
+  { id: 'flame', name: '火焰噴射器', short: '火焰', icon: '🔥', unlock: 34500, radius: 210, cooldown: 0.18, mode: 'holdFan', branch: 'area', fanDeg: 70, tick: 0.2, tickDamage: 1 },
+  { id: 'magnet', name: '磁力吸塵器', short: '磁力', icon: '🧲', unlock: 40500, radius: 240, cooldown: 1.00, mode: 'magnet', damage: 2, branch: 'area' },
+  { id: 'rocket', name: '火箭除蟲炮', short: '火箭', icon: '🚀', unlock: 47000, radius: 110, cooldown: 1.20, mode: 'rocket', damage: 3, branch: 'precise' },
+  { id: 'plasma', name: '等離子切割槍', short: '電漿', icon: '🔆', unlock: 54500, radius: 0, cooldown: 0.90, mode: 'laser', band: 60, damage: 99, bossDamage: 12, pierce: true, branch: 'area' },
+  { id: 'iceTrap', name: '急凍陷阱板', short: '冰紙', icon: '🧊', unlock: 63000, radius: 140, cooldown: 1.50, mode: 'trap', branch: 'precise', trapTTL: 5, freeze: 3.5 },
+  { id: 'drone', name: '自動巡弋無人機', short: '無人機', icon: '🛸', unlock: 73000, radius: 260, cooldown: 6.00, mode: 'drone', damage: 1, droneTTL: 6, fireEvery: 0.35, branch: 'area' },
+  { id: 'nuke', name: '全域殲滅裝置', short: '殲滅', icon: '☢️', unlock: 85000, radius: 0, cooldown: 8.00, mode: 'screen', bossDamage: 15, branch: 'area' },
 ];
 
 const FLY_TYPES = {
@@ -503,44 +532,109 @@ const FLY_TYPES = {
   miniboss: { r: 26, hp: 20, speed: 95,  points: 120, color: '#7a2e2e', label: '迷你蠅王', boss: true, mini: true },
 };
 
-const LEVELS = {
-  1: {
-    name: '夏日客廳的西瓜切片', time: 40,
-    goal: { type: 'score', target: 500 },
-    targetCount: 10, spawnEvery: 1.05, types: ['house'], watermelon: true,
-    tip: '蒼蠅停在西瓜上時擊殺 → 分數雙倍',
+const CHAPTERS = [
+  {
+    id: 1, theme: 1, name: '夏日客廳', name_en: 'Living Room', types: ['house', 'bottle', 'swarm'],
+    tip: '蒼蠅停在西瓜上時擊殺 → 分數雙倍；第 5 關起會出現綠頭蠅',
+    tip_en: 'Swat flies resting on the watermelon for double points; bottle flies appear from level 5',
   },
-  2: {
-    name: '熱鬧的傳統菜市場', time: 50,
-    goal: { type: 'kills', target: 35, maxMisses: 8 },
-    targetCount: 14, spawnEvery: 0.85, types: ['house', 'bottle', 'swarm'],
-    tip: '綠頭大蒼蠅要打 2 下；果蠅群適合用電蚊拍一次電掉',
+  {
+    id: 2, theme: 2, name: '傳統菜市場', name_en: 'Market', types: ['house', 'bottle', 'swarm'],
+    tip: '擊殺目標逐關提高，空拍上限也越來越嚴；果蠅群用 AOE 一次清',
+    tip_en: 'Kill targets rise every level and misses get stricter; clear fruit-fly swarms with AOE',
   },
-  3: {
-    name: '麵包店的櫥窗保衛戰', time: 60,
-    goal: { type: 'defend', target: 100 },
-    targetCount: 8, spawnEvery: 1.25, types: ['house', 'gold'], defend: true, drainPerSec: 5,
-    tip: '蒼蠅停在可頌上會每秒扣 5 點衛生度；金斑麗蠅靜止時幾乎隱形',
+  {
+    id: 3, theme: 3, name: '麵包店櫥窗', name_en: 'Bakery', types: ['house', 'gold'],
+    tip: '防禦關卡：別讓蒼蠅停在可頌上，金斑麗蠅靜止時幾乎隱形',
+    tip_en: 'Defence: keep flies off the croissant; gold flies nearly vanish when resting',
   },
-  4: {
-    name: '戶外露營區的野餐墊', time: 60,
-    goal: { type: 'kills', target: 50, maxBeeHits: 2 },
-    targetCount: 12, spawnEvery: 0.8, types: ['house', 'swarm'], bees: true, gustEvery: 15,
-    tip: '蜜蜂是友軍：誤擊扣 200 分並凍結武器 1 秒，超過 2 次就失敗',
+  {
+    id: 4, theme: 4, name: '露營野餐墊', name_en: 'Campsite', types: ['house', 'swarm', 'bottle'],
+    tip: '蜜蜂是友軍，誤擊扣 200 分並凍結武器；每 15 秒左右有側風',
+    tip_en: 'Bees are friendly — hitting one costs 200 points and freezes your weapon; gusts push flies sideways',
   },
-  5: {
-    name: '後巷廚餘桶的決戰', time: 90,
-    goal: { type: 'boss' },
-    targetCount: 5, spawnEvery: 2.0, types: ['house'], boss: true,
-    tip: 'Phase 1 有護盾（先清子嗣）；Phase 2 俯衝後力竭 2 秒，此時傷害雙倍',
+  {
+    id: 5, theme: 5, name: '後巷廚餘桶', name_en: 'Back Alley', types: ['house', 'bottle', 'swarm'],
+    tip: '每 10 關一場蠅王；P1 先清護盾，P2 俯衝後力竭時傷害雙倍',
+    tip_en: 'A Fly King every 10 levels; clear shields in P1, punish the 2s exhaustion after a P2 dive',
   },
-};
+];
+
+const BOSS_TIP = { zh: '蠅王：P1 先清護盾子嗣；P2 俯衝後力竭 2 秒，傷害雙倍', en: 'Fly King: clear the shield minions in P1; after a P2 dive it is exhausted for 2s — double damage' };
+const DEFEND_TIP = { zh: '防禦：停在可頌上的蒼蠅會持續扣衛生度，優先清掉', en: 'Defence: flies eating the croissant drain freshness — clear them first' };
+
+/* 100 關：5 章 × 20 關，數值隨關卡單調變難（生成而非手寫，避免 100 份重複資料漂移） */
+function makeLevel(n) {
+  const chapter = CHAPTERS[Math.floor((n - 1) / 20)];
+  const stage = ((n - 1) % 20) + 1;
+  const isBoss = stage % 10 === 0;
+  const isDefend = !isBoss && chapter.id === 3 && stage % 3 !== 0;
+  const isKills = !isBoss && !isDefend && (chapter.id === 2 || chapter.id === 4 || stage % 2 === 0);
+
+  const types = chapter.types.filter((tp) => {
+    if (tp === 'bottle') return n >= 5;
+    if (tp === 'swarm') return n >= 8;
+    return true;
+  });
+  if (n >= 30 && !types.includes('gold')) types.push('gold');
+
+  const cfg = {
+    chapter: chapter.id,
+    stage,
+    theme: chapter.theme,
+    name: chapter.name,
+    name_en: chapter.name_en,
+    time: 40,
+    speedMul: Math.min(1.5, 1 + (n - 1) * 0.0035),
+    spawnEvery: Math.max(0.30, 0.95 - n * 0.006),
+    targetCount: Math.min(28, 8 + Math.floor(n * 0.17)),
+    types,
+    tip: chapter.tip,
+    tip_en: chapter.tip_en,
+    watermelon: chapter.id === 1 && stage <= 5,
+    bees: chapter.id === 4 && !isBoss,
+    gustEvery: chapter.id === 4 && !isBoss ? Math.max(9, 16 - n * 0.05) : 0,
+  };
+
+  if (isBoss) {
+    cfg.goal = { type: 'boss' };
+    cfg.boss = true;
+    cfg.bossHp = 80 + Math.floor((n - 10) / 10) * 35;   // 第 10 關 80、第 100 關 395
+    cfg.shieldCount = 8 + Math.floor(n / 20);
+    cfg.time = 80;
+    cfg.targetCount = 6;
+    cfg.spawnEvery = Math.max(0.6, 1.4 - n * 0.006);
+    cfg.types = ['house'];
+    cfg.tip = BOSS_TIP.zh;
+    cfg.tip_en = BOSS_TIP.en;
+  } else if (isDefend) {
+    cfg.goal = { type: 'defend', target: 100 };
+    cfg.defend = true;
+    cfg.drainPerSec = 4 + Math.floor(n / 20);
+    cfg.time = Math.round(45 + Math.min(15, n * 0.12));
+    cfg.tip = DEFEND_TIP.zh;
+    cfg.tip_en = DEFEND_TIP.en;
+  } else if (isKills) {
+    cfg.goal = { type: 'kills', target: 14 + Math.floor(n * 0.5), maxMisses: 6 + Math.floor(n / 15) };
+    if (cfg.bees) cfg.goal.maxBeeHits = 2;
+    cfg.time = Math.round(45 + Math.min(20, n * 0.15));
+  } else {
+    cfg.goal = { type: 'score', target: 300 + n * 40 };
+    cfg.time = Math.round(40 + Math.min(20, n * 0.15));
+    if (cfg.bees) cfg.goal.maxBeeHits = 2;
+  }
+  return cfg;
+}
+
+const LEVELS = {};
+for (let n = 1; n <= 100; n++) LEVELS[n] = makeLevel(n);
 
 const ENDLESS_CFG = {
   name: '無盡狂暴模式', time: Infinity,
   goal: { type: 'endless' },
   targetCount: 8, spawnEvery: 0.9, types: ['house', 'bottle', 'swarm'],
   tip: '容錯 20 次空拍；每 60 秒出迷你蠅王，結束後記錄存活時間與最高 Combo',
+  tip_en: '20 misses allowed; a mini Fly King every 60s; survive as long as you can',
 };
 
 /* ==================================================================== *
@@ -549,6 +643,7 @@ const ENDLESS_CFG = {
 const state = {
   phase: 'menu',              // menu | playing | won | lost
   level: 1,
+  menuChapter: null,
   endless: false,
   score: 0,
   levelScore: 0,
@@ -564,6 +659,10 @@ const state = {
   flies: [],
   clouds: [],
   traps: [],
+  waves: [],
+  decoys: [],
+  rockets: [],
+  drones: [],
   effects: [],
   laser: null,
   boss: null,
@@ -596,7 +695,7 @@ const I18N = {
     endlessTitle: 'Endless Rampage · ENDLESS',
     scoreUnit: 'pts',
     gameTitle: 'FLY SWAT RAMPAGE',
-    tagline: '8 weapons · 5 levels · Endless mode',
+    tagline: '20 weapons · 100 levels · Endless mode',
     levelShort: 'Level {n}',
     goalScore: '{a} / {b} pts',
     goalKills: '{a} / {b} flies',
@@ -611,7 +710,7 @@ const I18N = {
     survival: 'Alive {s}s · misses left {m} · best combo {c}',
     combo: 'COMBO ×{n}',
     endlessCard: '♾ Endless Rampage',
-    endlessLocked: '🔒 Endless (clear Level 5)',
+    endlessLocked: '🔒 Endless (clear Level 100)',
     endlessSub: '20 misses allowed · mini boss every 60s',
     startFrom1: 'Start from Level 1',
     weaponUp: 'Weapon upgraded! {name}',
@@ -670,10 +769,15 @@ const I18N = {
       newspaper: 'Rolled Newspaper', swatter: 'Plastic Fly Swatter', trap: 'Flypaper Trap',
       electric: 'Electric Swatter', salt: 'Salt Shotgun', spray: 'Insect Spray',
       twin: 'Dual Electric Swatters', laser: 'Extermination Laser',
+      net: 'High-Voltage Net', cryo: 'Cryo Sprayer', triple: 'Triple Swatter', sonic: 'Sonic Shocker',
+      decoy: 'Honey Decoy', flame: 'Flame Thrower', magnet: 'Magnetic Vacuum', rocket: 'Rocket Exterminator',
+      plasma: 'Plasma Cutter', iceTrap: 'Freeze Trap', drone: 'Patrol Drone', nuke: 'Total Extermination',
     },
     weaponShorts: {
       newspaper: 'Paper', swatter: 'Swatter', trap: 'Paper', electric: 'Zapper',
       salt: 'Salt', spray: 'Spray', twin: 'Dual', laser: 'Laser',
+      net: 'Net', cryo: 'Cryo', triple: 'Triple', sonic: 'Sonic', decoy: 'Decoy', flame: 'Flame',
+      magnet: 'Magnet', rocket: 'Rocket', plasma: 'Plasma', iceTrap: 'Ice Trap', drone: 'Drone', nuke: 'Nuke',
     },
     levelNames: {
       1: 'Watermelon Slice Living Room', 2: 'Busy Traditional Market', 3: 'Bakery Window Defence',
@@ -688,7 +792,7 @@ const I18N = {
     endlessTitle: '無盡狂暴模式 · ENDLESS',
     scoreUnit: '分',
     gameTitle: '打擊蒼蠅大作戰',
-    tagline: '8 把武器 · 5 個關卡 · 無盡模式',
+    tagline: '20 把武器 · 100 個關卡 · 無盡模式',
     levelShort: '第 {n} 關',
     goalScore: '{a} / {b} 分',
     goalKills: '{a} / {b} 隻',
@@ -703,7 +807,7 @@ const I18N = {
     survival: '存活 {s} 秒 · 容錯 {m} · Combo {c}',
     combo: 'COMBO ×{n}',
     endlessCard: '♾ 無盡狂暴模式',
-    endlessLocked: '🔒 無盡（通關第 5 關解鎖）',
+    endlessLocked: '🔒 無盡（通關第 100 關解鎖）',
     endlessSub: '容錯 20、每 60 秒迷你王',
     startFrom1: '從第 1 關開始',
     weaponUp: '武器升級！{name}',
@@ -762,10 +866,15 @@ const I18N = {
       newspaper: '捲起來的報紙', swatter: '傳統塑膠蒼蠅拍', trap: '黏蠅紙陷阱板',
       electric: '電蚊拍', salt: '散彈鹽狗散彈槍', spray: '強效殺蟲噴霧',
       twin: '雙持高壓電蚊拍', laser: '終極除蟲雷射炮',
+      net: '高壓電擊網', cryo: '急凍噴射器', triple: '三連蒼蠅拍', sonic: '音波震盪器',
+      decoy: '誘餌陷阱', flame: '火焰噴射器', magnet: '磁力吸塵器', rocket: '火箭除蟲炮',
+      plasma: '等離子切割槍', iceTrap: '急凍陷阱板', drone: '自動巡弋無人機', nuke: '全域殲滅裝置',
     },
     weaponShorts: {
       newspaper: '報紙', swatter: '塑膠拍', trap: '黏紙', electric: '電蚊拍',
       salt: '鹽槍', spray: '噴霧', twin: '雙拍', laser: '雷射',
+      net: '電網', cryo: '冰霧', triple: '三連', sonic: '音波', decoy: '誘餌', flame: '火焰',
+      magnet: '磁力', rocket: '火箭', plasma: '電漿', iceTrap: '冰紙', drone: '無人機', nuke: '殲滅',
     },
     levelNames: {
       1: '夏日客廳的西瓜切片', 2: '熱鬧的傳統菜市場', 3: '麵包店的櫥窗保衛戰',
@@ -799,10 +908,12 @@ function t(key, vars) {
 }
 function wName(w) { return I18N[LANG].weaponNames[w.id] || w.name; }
 function wShort(w) { return I18N[LANG].weaponShorts[w.id] || w.short; }
-function lvName(n) { return I18N[LANG].levelNames[n] || LEVELS[n].name; }
+function lvName(n) { const L = LEVELS[n]; return L ? (LANG === 'zh' ? L.name : L.name_en) : ''; }
 function lvTip(n) {
-  const s = (I18N[LANG].tips && I18N[LANG].tips[n]) || (I18N.en.tips && I18N.en.tips[n]);
-  return s || (LEVELS[n] && LEVELS[n].tip) || '';
+  if (n === 'endless') return LANG === 'zh' ? ENDLESS_CFG.tip : ENDLESS_CFG.tip_en;
+  const L = LEVELS[n];
+  if (!L) return '';
+  return LANG === 'zh' ? L.tip : L.tip_en;
 }
 
 /* ==================================================================== *
@@ -1136,7 +1247,7 @@ class Fly {
   }
 
   castSummon() {
-    const n = this.isMiniBoss ? 3 : 10;
+    const n = this.isMiniBoss ? 3 : (state.levelConfig.shieldCount || 10);
     for (let i = 0; i < n; i++) {
       const m = new Fly(this.isMiniBoss ? 'minion' : 'fruit', { x: this.x + rand(-60, 60), y: this.y + rand(-40, 40) });
       m.state = 'fly';
@@ -1222,7 +1333,7 @@ function levelUnlocked(n) {
   const p = loadProgress();
   return !!p[n] || !!p[n - 1];
 }
-function endlessUnlocked() { return !!loadProgress()[5]; }
+function endlessUnlocked() { return !!loadProgress()[100]; }
 
 function loadBoard() {
   try { return JSON.parse(localStorage.getItem(BOARD_KEY) || '[]'); } catch (e) { return []; }
@@ -1289,7 +1400,7 @@ function addBeeHit(bee) {
   state.effects.push({ type: 'text', x: bee.x, y: bee.y - 20, ttl: 0.9, t: 0, text: t('beeHitText'), color: '#ffd166' });
   state.effects.push({ type: 'wave', x: bee.x, y: bee.y, r: 18, ttl: 0.5, t: 0, color: '#ffd166' });
   Sfx.lose();
-  showToast(t('beeHit', { a: state.beeHits, b: LEVELS[4].goal.maxBeeHits }));
+  showToast(t('beeHit', { a: state.beeHits, b: (state.levelConfig.goal && state.levelConfig.goal.maxBeeHits) || 2 }));
 }
 
 /* ==================================================================== *
@@ -1317,8 +1428,15 @@ function attack(x, y) {
   switch (w.mode) {
     case 'laser': fireLaser(y, w); return;
     case 'hold': spawnCloud(x, y, w); return;
+    case 'holdFan': fireFlame(x, y, w); return;
     case 'trap': placeTrap(x, y, w); return;
     case 'fan': fireSalt(x, y, w); return;
+    case 'wave': fireWave(x, y, w); return;
+    case 'decoy': placeDecoy(x, y, w); return;
+    case 'magnet': fireMagnet(x, y, w); return;
+    case 'rocket': fireRocket(x, y, w); return;
+    case 'drone': deployDrone(x, y, w); return;
+    case 'screen': fireScreen(w); return;
     default: tapStrike(x, y, w); return;
   }
 }
@@ -1327,7 +1445,9 @@ function tapStrike(x, y, w) {
   Sfx.swing(w.id);
   state.effects.push({ type: 'ring', x, y, r: w.radius, ttl: 0.32, t: 0, color: w.id === 'electric' || w.id === 'twin' ? '#7fd4ff' : '#ffe6b8' });
 
-  const centers = w.twin ? [{ x: x - 55, y }, { x: x + 55, y }] : [{ x, y }];
+  const centers = w.twin ? [{ x: x - 55, y }, { x: x + 55, y }]
+    : w.triple ? [{ x: x - 70, y }, { x, y }, { x: x + 70, y }]
+      : [{ x, y }];
   const hits = [];
   for (const c of centers) {
     const local = fliesWithin(c.x, c.y, w.radius);
@@ -1414,7 +1534,7 @@ function placeTrap(x, y, w) {
 }
 
 function spawnCloud(x, y, w) {
-  state.clouds.push({ x, y, r: 10, target: w.radius, ttl: 1.5, t: 0, acc: 0, tick: w.tick, damage: w.tickDamage });
+  state.clouds.push({ x, y, r: 10, target: w.radius, ttl: 1.5, t: 0, acc: 0, tick: w.tick, damage: w.tickDamage, freeze: w.freeze || 0 });
   Sfx.spray();
 }
 
@@ -1429,6 +1549,80 @@ function fireLaser(y, w) {
   state.laser = { y, t: 0, ttl: 0.4, band };
   state.shake = 7;
   Sfx.laser();
+}
+
+/* ---- V5 新武器 ---- */
+function fireWave(x, y, w) {
+  Sfx.swing('sonic');
+  state.waves.push({ x, y, r: 24, maxR: w.radius, damage: w.damage, t: 0, ttl: 0.45, hit: new Set() });
+  state.effects.push({ type: 'ring', x, y, r: w.radius, ttl: 0.45, t: 0, color: '#9fe8ff' });
+  state.shake = 3;
+}
+
+function placeDecoy(x, y, w) {
+  Sfx.spray();
+  state.decoys.push({ x, y, r: 230, ttl: 2.2, t: 0, explodeR: w.radius, damage: w.damage });
+  state.effects.push({ type: 'ring', x, y, r: 230, ttl: 0.5, t: 0, color: '#ffd166' });
+}
+
+function fireMagnet(x, y, w) {
+  Sfx.swing('magnet');
+  for (const f of fliesWithin(x, y, w.radius)) {
+    if (f.isBoss || f.friendly) continue;
+    f.x += (x - f.x) * 0.55;
+    f.y += (y - f.y) * 0.55;
+    f.frozenT = Math.max(f.frozenT, 0.35);
+    zapTo(f.x, f.y, x, y);
+    damageFly(f, w.damage, f.x, f.y);
+  }
+  state.effects.push({ type: 'ring', x, y, r: w.radius, ttl: 0.35, t: 0, color: '#b28bff' });
+  state.shake = 4;
+}
+
+function fireRocket(x, y, w) {
+  Sfx.swing('rocket');
+  state.rockets.push({ x: W / 2, y: H - 90, tx: x, ty: y, t: 0, speed: 1300, r: w.radius, damage: w.damage });
+}
+
+function deployDrone(x, y, w) {
+  Sfx.upgrade();
+  state.drones.push({
+    x, y, ttl: w.droneTTL || 6, t: 0, fireT: 0, range: w.radius,
+    damage: w.damage, fireEvery: w.fireEvery || 0.35,
+  });
+  state.effects.push({ type: 'wave', x, y, r: 16, ttl: 0.5, t: 0, color: '#7fd4ff' });
+}
+
+function fireScreen(w) {
+  Sfx.laser();
+  for (const f of [...state.flies]) {
+    if (f.dead || f.state === 'dying' || f.friendly) continue;
+    if (f.isBoss) damageFly(f, w.bossDamage, f.x, f.y, { pierce: true });
+    else damageFly(f, 99, f.x, f.y, { pierce: true });
+  }
+  state.effects.push({ type: 'flash', ttl: 0.4, t: 0, color: '#ffd9a0' });
+  state.shake = 9;
+}
+
+function fireFlame(x, y, w) {
+  let ux = W / 2 - x, uy = H / 2 - y;
+  if (Math.hypot(ux, uy) < 12) { ux = 0; uy = -1; }
+  const len = Math.hypot(ux, uy) || 1;
+  ux /= len; uy /= len;
+  const half = (w.fanDeg * Math.PI) / 360;
+  for (const f of state.flies) {
+    if (f.dead || f.state === 'dying' || f.friendly) continue;
+    const dx = f.x - x, dy = f.y - y, d = Math.hypot(dx, dy);
+    if (d > w.radius) continue;
+    if (Math.acos(clamp((dx * ux + dy * uy) / (d || 1), -1, 1)) > half) continue;
+    damageFly(f, w.tickDamage, f.x, f.y);
+  }
+  state.effects.push({
+    type: 'fan', x, y, angle: Math.atan2(uy, ux), spread: half,
+    radius: w.radius, ttl: 0.18, t: 0, color: '#ff9a4a',
+  });
+  Sfx.spray();
+  state.shake = 2;
 }
 
 function zapTo(x1, y1, x2, y2) {
@@ -1902,6 +2096,8 @@ function startLevel(n, resetRun = false) {
   resetRound();
   if (state.levelConfig.boss) {
     const boss = new Fly('boss', { x: W / 2, y: H * 0.33 });
+    const hp = state.levelConfig.bossHp || FLY_TYPES.boss.hp;
+    boss.hp = hp; boss.maxHp = hp;
     state.boss = boss;
     state.flies.push(boss);
   }
@@ -1950,6 +2146,10 @@ function resetRound() {
   state.flies = [];
   state.clouds = [];
   state.traps = [];
+  state.waves = [];
+  state.decoys = [];
+  state.rockets = [];
+  state.drones = [];
   state.effects = [];
   state.laser = null;
   state.boss = null;
@@ -1977,6 +2177,7 @@ function spawnFly(typeHint) {
       let last = null;
       for (let i = 0; i < n; i++) {
         const f = new Fly('fruit', { x: cx + rand(-20, 20), y: cy + rand(-20, 20) });
+        f.speed *= cfg.speedMul || 1;
         f.angle = dir > 0 ? 0 : Math.PI;            // 整團直線穿過
         last = pushFly(f);
       }
@@ -1984,6 +2185,7 @@ function spawnFly(typeHint) {
     }
   }
   const f = new Fly(type);
+  if (cfg.speedMul) { f.speed *= cfg.speedMul; f.baseSpeed = f.speed; }
   if (state.levelConfig.defend && !f.friendly) {
     const t = defendTarget();
     f.targetPos = { x: t.x, y: t.y, r: t.r };
@@ -2064,9 +2266,81 @@ function update(dt) {
     }
   }
 
+  // 誘餌：先把附近蒼蠅的航向拉向餌，再讓牠們移動
+  for (const d of state.decoys) {
+    for (const f of state.flies) {
+      if (f.dead || f.friendly || f.isBoss) continue;
+      if (dist2(d.x, d.y, f.x, f.y) <= d.r * d.r) f.angle = Math.atan2(d.y - f.y, d.x - f.x);
+    }
+  }
+
   // 蒼蠅
   for (const f of state.flies) f.update(dt, cfg);
   state.flies = state.flies.filter((f) => !f.dead);
+
+  // V5 特殊武器：誘餌爆炸／音波／火箭／無人機
+  for (let i = state.decoys.length - 1; i >= 0; i--) {
+    const d = state.decoys[i];
+    d.t += dt;
+    if (d.t >= d.ttl) {
+      for (const f of state.flies) {
+        if (f.dead || f.state === 'dying' || f.friendly) continue;
+        if (dist2(d.x, d.y, f.x, f.y) <= (d.explodeR + f.r) ** 2) damageFly(f, d.damage, f.x, f.y);
+      }
+      state.effects.push({ type: 'wave', x: d.x, y: d.y, r: 24, ttl: 0.6, t: 0, color: '#ffd166' });
+      burst(d.x, d.y, 12, '#ffd166', 240);
+      state.decoys.splice(i, 1);
+    }
+  }
+  for (let i = state.waves.length - 1; i >= 0; i--) {
+    const wv = state.waves[i];
+    wv.t += dt;
+    wv.r = 24 + (wv.maxR - 24) * Math.min(1, wv.t / wv.ttl);
+    for (const f of state.flies) {
+      if (f.dead || f.state === 'dying' || f.friendly || wv.hit.has(f)) continue;
+      if (dist2(wv.x, wv.y, f.x, f.y) <= (wv.r + f.r) ** 2) {
+        wv.hit.add(f);
+        damageFly(f, wv.damage, f.x, f.y);
+      }
+    }
+    if (wv.t >= wv.ttl) state.waves.splice(i, 1);
+  }
+  for (let i = state.rockets.length - 1; i >= 0; i--) {
+    const r = state.rockets[i];
+    r.t += dt;
+    const dx = r.tx - r.x, dy = r.ty - r.y, d = Math.hypot(dx, dy) || 1, step = r.speed * dt;
+    if (d <= step + 8 || r.t > 2) {
+      for (const f of state.flies) {
+        if (f.dead || f.state === 'dying' || f.friendly) continue;
+        if (dist2(r.tx, r.ty, f.x, f.y) <= (r.r + f.r) ** 2) damageFly(f, r.damage, f.x, f.y);
+      }
+      state.effects.push({ type: 'wave', x: r.tx, y: r.ty, r: 20, ttl: 0.5, t: 0, color: '#ff9a4a' });
+      burst(r.tx, r.ty, 16, '#ff9a4a', 280);
+      state.shake = 5;
+      state.rockets.splice(i, 1);
+    } else {
+      r.x += (dx / d) * step;
+      r.y += (dy / d) * step;
+    }
+  }
+  for (const dr of state.drones) {
+    dr.t += dt;
+    dr.fireT -= dt;
+    if (dr.fireT <= 0) {
+      let best = null, bd = dr.range * dr.range;
+      for (const f of state.flies) {
+        if (f.dead || f.state === 'dying' || f.friendly) continue;
+        const dd = dist2(dr.x, dr.y, f.x, f.y);
+        if (dd < bd) { bd = dd; best = f; }
+      }
+      if (best) {
+        zapTo(dr.x, dr.y, best.x, best.y);
+        damageFly(best, dr.damage, best.x, best.y);
+        dr.fireT = dr.fireEvery;
+      } else dr.fireT = 0.2;
+    }
+  }
+  state.drones = state.drones.filter((dr) => dr.t < dr.ttl);
 
   // 護盾子嗣環繞 Boss
   if (state.boss) {
@@ -2092,14 +2366,16 @@ function update(dt) {
   // 可頌被吃 → 扣衛生度
   if (state.defend && state.boss === null) {
     const eaters = state.flies.filter((f) => f.eating && !f.dead && f.state !== 'dying').length;
-    if (eaters > 0) state.defend.hp = Math.max(0, state.defend.hp - LEVELS[3].drainPerSec * eaters * dt);
+    if (eaters > 0) state.defend.hp = Math.max(0, state.defend.hp - (state.levelConfig.drainPerSec || 5) * eaters * dt);
     if (state.defend.hp <= 0) return loseLevel(t('lostCroissant'));
   }
 
   // 噴霧毒霧（每 0.3 秒結算一次）
-  if (state.pointer.down && currentWeapon().mode === 'hold' && state.cool <= 0) {
-    state.cool = currentWeapon().cooldown;
-    spawnCloud(state.pointer.x, state.pointer.y, currentWeapon());
+  const heldW = currentWeapon();
+  if (state.pointer.down && (heldW.mode === 'hold' || heldW.mode === 'holdFan') && state.cool <= 0) {
+    state.cool = heldW.cooldown;
+    if (heldW.mode === 'holdFan') fireFlame(state.pointer.x, state.pointer.y, heldW);
+    else spawnCloud(state.pointer.x, state.pointer.y, heldW);
   }
   for (let i = state.clouds.length - 1; i >= 0; i--) {
     const c = state.clouds[i];
@@ -2110,7 +2386,10 @@ function update(dt) {
       c.acc -= c.tick;
       for (const f of state.flies) {
         if (f.dead || f.state === 'dying' || f.friendly) continue;
-        if (dist2(c.x, c.y, f.x, f.y) <= (c.r + f.r) ** 2) damageFly(f, c.damage, f.x, f.y);
+        if (dist2(c.x, c.y, f.x, f.y) <= (c.r + f.r) ** 2) {
+          damageFly(f, c.damage, f.x, f.y);
+          if (c.freeze && !f.dead) f.frozenT = Math.max(f.frozenT, c.freeze);
+        }
       }
     }
     if (c.t >= c.ttl) state.clouds.splice(i, 1);
@@ -2157,7 +2436,7 @@ function winLevel(playSound = true) {
   state.phase = 'won';
   if (playSound) Sfx.win();
   saveProgress(state.level);
-  GP.moment('happyMoment', state.level >= 5 ? 'boss_defeated' : 'level_complete');
+  GP.moment('happyMoment', state.levelConfig && state.levelConfig.boss ? 'boss_defeated' : 'level_complete');
   showResult(true);
 }
 
@@ -2216,11 +2495,12 @@ function updateHud(force = false) {
   } else if (cfg.goal.type === 'boss') {
     const b = state.flies.find((f) => f.isBoss && !f.isMiniBoss);
     const hp = b ? b.hp : 0;
-    prog = 1 - hp / FLY_TYPES.boss.hp;
-    label = b ? t('bossHp', { hp: Math.ceil(hp), max: FLY_TYPES.boss.hp }) + (b.shieldCount > 0 ? t('bossShielded') : '') : t('bossDown');
+    const maxHp = b ? b.maxHp : (state.levelConfig.bossHp || FLY_TYPES.boss.hp);
+    prog = 1 - hp / maxHp;
+    label = b ? t('bossHp', { hp: Math.ceil(hp), max: maxHp }) + (b.shieldCount > 0 ? t('bossShielded') : '') : t('bossDown');
     dom.bossWrap.classList.add('on');
     dom.bossName.textContent = t('bossName');
-    dom.bossBar.style.width = `${clamp((hp / FLY_TYPES.boss.hp) * 100, 0, 100)}%`;
+    dom.bossBar.style.width = `${clamp((hp / maxHp) * 100, 0, 100)}%`;
   } else {
     prog = clamp(state.survival / 300, 0, 1);
     label = t('survival', { s: Math.floor(state.survival), m: Math.max(0, 20 - state.misses), c: state.bestCombo });
@@ -2256,6 +2536,8 @@ function renderWeaponBar() {
     if (!locked) b.addEventListener('pointerdown', (e) => { e.stopPropagation(); selectWeapon(i); });
     dom.weaponbar.appendChild(b);
   });
+  const active = dom.weaponbar.querySelector('.wbtn.active');
+  if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function showToast(text) {
@@ -2267,7 +2549,7 @@ function showToast(text) {
 
 function showResult(win, reason, board) {
   const cfg = state.levelConfig;
-  const last = !state.endless && state.level >= 5;
+  const last = !state.endless && state.level >= 100;
   const stats = win
     ? `<div><span>${t('thisRun')}</span><b>${state.levelScore}</b></div>
        <div><span>${t('totalScore')}</span><b>${state.score}</b></div>
@@ -2366,12 +2648,35 @@ function showStart() {
   dom.bossWrap.classList.remove('on', 'defend');
   dom.combo.classList.remove('show');
   const prog = loadProgress();
-  const chips = Object.entries(LEVELS).map(([n, cfg]) => {
-    const unlocked = levelUnlocked(+n);
-    const cleared = !!prog[n];
-    return `<button class="lv${unlocked ? '' : ' locked'}" data-level="${n}" ${unlocked ? '' : 'disabled'}>
-      <b>${cleared ? t('levelCleared') : (unlocked ? '▶' : t('locked'))} ${t('levelShort', { n })}</b><span>${lvName(+n)}</span></button>`;
+
+  let maxCleared = 0;
+  for (const k in prog) if (prog[k]) maxCleared = Math.max(maxCleared, +k);
+  if (!state.menuChapter) {
+    state.menuChapter = clamp(Math.floor(maxCleared / 20) + 1, 1, CHAPTERS.length);
+  }
+  const chap = clamp(state.menuChapter, 1, CHAPTERS.length);
+  state.menuChapter = chap;
+  const chapter = CHAPTERS[chap - 1];
+  let chapCleared = 0;
+  for (let i = 0; i < 20; i++) if (prog[(chap - 1) * 20 + i + 1]) chapCleared++;
+
+  const chapBtns = CHAPTERS.map((c) => {
+    const first = (c.id - 1) * 20 + 1;
+    const unlocked = levelUnlocked(first);
+    let done = 0;
+    for (let i = 0; i < 20; i++) if (prog[first + i]) done++;
+    return `<button class="chtab${c.id === chap ? ' active' : ''}" data-chap="${c.id}" ${unlocked ? '' : 'disabled'}>
+      ${LANG === 'zh' ? c.name : c.name_en}<small>${done}/20</small></button>`;
   }).join('');
+
+  const cells = Array.from({ length: 20 }, (_, i) => {
+    const n = (chap - 1) * 20 + i + 1;
+    const unlocked = levelUnlocked(n);
+    const cleared = !!prog[n];
+    return `<button class="lvcell${unlocked ? '' : ' locked'}" data-level="${n}" ${unlocked ? '' : 'disabled'}>
+      <b>${cleared ? t('levelCleared') : (unlocked ? '▶' : t('locked'))}</b><span>${n}</span></button>`;
+  }).join('');
+
   const board = loadBoard();
   const boardHtml = board.length
     ? `<div class="board"><div class="bt">${t('boardTitle')}</div>${board.slice(0, 3).map((b, i) =>
@@ -2379,18 +2684,24 @@ function showStart() {
 
   dom.card.innerHTML = `
     <h1>${t('gameTitle')}</h1>
-    <div class="sub">V4 · FLY SWAT RAMPAGE</div>
+    <div class="sub">V5 · FLY SWAT RAMPAGE</div>
     <p>${t('tagline')}</p>
-    <div class="levels">${chips}</div>
+    <div class="chapters">${chapBtns}</div>
+    <div class="chapterInfo">${LANG === 'zh' ? chapter.name : chapter.name_en} · ${chapCleared}/20</div>
+    <div class="lvgrid">${cells}</div>
     <button class="lv endless${endlessUnlocked() ? '' : ' locked'}" id="btnEndlessMenu" ${endlessUnlocked() ? '' : 'disabled'}>
       <b>${endlessUnlocked() ? t('endlessCard') : t('endlessLocked')}</b><span>${t('endlessSub')}</span></button>
     ${boardHtml}
     <div class="btns"><button id="btnStart" class="primary">${t('startFrom1')}</button></div>
     <div class="hint">${t('playHint')}</div>`;
   dom.modal.classList.remove('hidden');
-  document.getElementById('btnStart').onclick = () => { Sfx.init(); startLevel(1, true); };
+  document.getElementById('btnStart').onclick = () => { Sfx.init(); state.menuChapter = 1; startLevel(1, true); };
   document.getElementById('btnEndlessMenu').onclick = () => { Sfx.init(); startEndless(); };
-  dom.card.querySelectorAll('.lv[data-level]').forEach((btn) => {
+  dom.card.querySelectorAll('.chtab').forEach((btn) => {
+    if (btn.disabled) return;
+    btn.onclick = () => { state.menuChapter = +btn.dataset.chap; showStart(); };
+  });
+  dom.card.querySelectorAll('.lvcell[data-level]').forEach((btn) => {
     if (btn.disabled) return;
     btn.onclick = () => { Sfx.init(); startLevel(+btn.dataset.level, false); };
   });
@@ -2481,6 +2792,44 @@ function render() {
     ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
   }
 
+  // 誘餌
+  for (const d of state.decoys) {
+    const k = clamp(1 - d.t / d.ttl, 0, 1);
+    ctx.globalAlpha = 0.5 * k + 0.12;
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath(); ctx.arc(d.x, d.y, 14, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (0.55 + 0.45 * k), 0, TAU); ctx.stroke();
+  }
+  // 音波
+  for (const wv of state.waves) {
+    const k = 1 - wv.t / wv.ttl;
+    ctx.globalAlpha = 0.6 * k;
+    ctx.strokeStyle = '#9fe8ff'; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.arc(wv.x, wv.y, wv.r, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+  // 火箭
+  for (const r of state.rockets) {
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffe0a0';
+    ctx.beginPath(); ctx.arc(r.x, r.y, 6, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,140,60,.75)';
+    ctx.beginPath(); ctx.moveTo(r.x, r.y);
+    ctx.lineTo(r.x + (r.x - r.tx) * 0.06, r.y + (r.y - r.ty) * 0.06); ctx.stroke();
+  }
+  // 無人機
+  for (const dr of state.drones) {
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = '#7fd4ff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(dr.x, dr.y, 10 + Math.sin(timeAlive * 6) * 2, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#7fd4ff';
+    ctx.beginPath(); ctx.arc(dr.x, dr.y, 4, 0, TAU); ctx.fill();
+    ctx.lineWidth = 1;
+  }
+  ctx.globalAlpha = 1;
+
   for (const f of state.flies) drawFly(f);
 
   if (state.phase === 'playing' && state.pointer.x >= 0) {
@@ -2537,7 +2886,7 @@ function loop(now) {
 resize();
 Sfx.loadPref();
 document.documentElement.lang = LANG === 'zh' ? 'zh-Hant' : 'en';
-document.title = LANG === 'zh' ? '打擊蒼蠅大作戰 V4 · Fly Swat Rampage' : 'Fly Swat Rampage V4';
+document.title = LANG === 'zh' ? '打擊蒼蠅大作戰 V5 · Fly Swat Rampage' : 'Fly Swat Rampage V5';
 const loadingSub = document.getElementById('loadingSub');
 if (loadingSub) loadingSub.textContent = LANG === 'zh' ? '打擊蒼蠅大作戰' : 'SWAT OR BE SWARMED';
 dom.levelName.textContent = t('levelN', { n: 1, name: lvName(1) });
@@ -2567,6 +2916,10 @@ window.__game = {
   get traps() { return state.traps; },
   get defend() { return state.defend; },
   get effects() { return state.effects; },
+  get waves() { return state.waves; },
+  get decoys() { return state.decoys; },
+  get rockets() { return state.rockets; },
+  get drones() { return state.drones; },
   get frame() { return frameCount; },
   get weapon() { return currentWeapon().id; },
   get unlocked() { return state.unlocked; },
@@ -2588,7 +2941,7 @@ window.__game = {
   forceSummon: () => state.flies.find((f) => f.isBoss)?.castSummon(),
   forceDive: () => state.flies.find((f) => f.isBoss && !f.isMiniBoss)?.startDive(),
   forceExhaust: (t = 2) => { const b = state.flies.find((f) => f.isBoss); if (b) b.exhaustT = t; },
-  forceGust: () => { state.wind = { dir: 1, t: 1.3, strength: 260 }; state.gustT = LEVELS[4].gustEvery; },
+  forceGust: () => { state.wind = { dir: 1, t: 1.3, strength: 260 }; state.gustT = state.levelConfig.gustEvery || 15; },
   forcePhase2: () => { const b = state.flies.find((f) => f.isBoss && !f.isMiniBoss); if (b) b.hp = Math.floor(b.maxHp * 0.4); },
   setTimeLeft: (v) => { state.timeLeft = v; },
   loseLevel,
