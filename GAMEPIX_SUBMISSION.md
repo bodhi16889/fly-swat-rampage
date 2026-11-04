@@ -168,7 +168,7 @@ fly-swat-rampage-gamepix.zip
 
 ## 驗證記錄（本機實跑）
 
-- `python3 verify_smoke.py`：**97 / 97 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **96 / 96**。
+- `python3 verify_smoke.py`：**97 / 97 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **97 / 97**。
 - 真 SDK（非 stub）本機模擬：
   - `?gpx_ad=success` → 過關按「下一關」播完後進第 2 關；`?gpx_ad=nofill` → 不播廣告仍進第 2 關（`{success:false}`）。
   - `?gpx_reward=success` → 關卡失敗後復活（`phase=playing`, `timeLeft=65`, `revived=true`）。
