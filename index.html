@@ -3769,7 +3769,7 @@ function drawStaticScene(g, spec, w, h) {
   g.fillStyle = vig; g.fillRect(0, 0, w, h);
 }
 
-function drawSceneFx(spec, w, h) {
+function drawSceneFx(g, spec, w, h) {
   const t = timeAlive;
   if (!spec) return;
   if (spec.time.id === 'rain' || spec.time.id === 'neon') {
@@ -3806,7 +3806,7 @@ function drawBackground() {
     bgCache = { key, canvas: cv, spec };
   }
   ctx.drawImage(bgCache.canvas, 0, 0, W, H);
-  drawSceneFx(bgCache.spec, W, H);
+  drawSceneFx(ctx, bgCache.spec, W, H);
 
   // 突風視覺
   if (state.wind) {
