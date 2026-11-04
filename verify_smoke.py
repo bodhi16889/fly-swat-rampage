@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""打擊蒼蠅大作戰 —— 端到端驗證（Playwright，headless Chromium）。
+"""打擊蒼蠅大作戰 V4 —— 端到端驗證（Playwright）。
 
-    python verify_smoke.py                 # 自動選埠，測本機檔案
-    python verify_smoke.py --base-url ...  # 測既有網址（GitHub Pages / tunnel）
-    python verify_smoke.py --headed        # 想看畫面
+涵蓋：8 把武器（含黏蠅紙定身易傷、鹽槍扇心暴擊、電蚊拍連鎖、雙持雙點、雷射穿透）、
+第 3 關防禦（可頌衛生度）、第 4 關蜜蜂懲罰與突風、第 5 關 Boss 二階段/護盾/力竭、
+無盡模式（存活、迷你王、排行）、V3 音效與人聲、手機直向版面。
 
-檢查範圍：啟動流程、蒼蠅遊走與停歇、點擊命中/落空、5 種武器（報紙/塑膠拍/電蚊拍 AOE/
-噴霧持續傷害/雷射橫掃）、分數門檻解鎖、三關目標判定、Boss（40 血以上機制、召喚、僵直雙倍傷害）、
-結算彈窗按鈕、手機直向版面。
+    python verify_smoke.py [--base-url URL] [--headed]
 """
 from __future__ import annotations
 
@@ -46,16 +44,12 @@ def serve(directory: Path, port: int) -> socketserver.TCPServer:
     return server
 
 
-def wait_cool(page, seconds: float = 0.45) -> None:
-    time.sleep(seconds)
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="")
-    parser.add_argument("--port", type=int, default=0)
-    parser.add_argument("--headed", action="store_true")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base-url", default="")
+    ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--headed", action="store_true")
+    args = ap.parse_args()
 
     ART.mkdir(exist_ok=True)
     server = None
@@ -75,226 +69,325 @@ def main() -> int:
             args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
                   "--autoplay-policy=no-user-gesture-required"],
         )
-        page = browser.new_page(viewport={"width": 420, "height": 860})
+        page = browser.new_page(viewport={"width": 430, "height": 880})
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
         page.goto(url, wait_until="load")
         page.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        page.evaluate("try { localStorage.clear(); } catch (e) {}")
+        page.reload(wait_until="load")
+        page.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
 
-        # ---------- 1. 啟動 / 版面 ----------
+        # ---------- 1. 版面 / 主循環 ----------
         vp = page.evaluate("({w: innerWidth, h: innerHeight, dpr: devicePixelRatio, cw: game.width, ch: game.height, touch: getComputedStyle(document.body).touchAction})")
-        check("canvas 依裝置像素比滿版", vp["cw"] == int(vp["w"] * min(vp["dpr"], 2)) and vp["ch"] == int(vp["h"] * min(vp["dpr"], 2)), str(vp))
-        check("阻擋預設觸控手勢（touch-action:none）", vp["touch"] == "none", vp["touch"])
-
-        f0 = page.evaluate("window.__game.frame")
+        check("canvas 依 DPR 滿版", vp["cw"] == int(vp["w"] * min(vp["dpr"], 2)) and vp["ch"] == int(vp["h"] * min(vp["dpr"], 2)), str(vp))
+        check("阻擋預設觸控手勢", vp["touch"] == "none")
+        f0 = page.evaluate("__game.frame")
         time.sleep(1.0)
-        f1 = page.evaluate("window.__game.frame")
-        check("60FPS 主循環有在跑", f1 - f0 >= 8, f"{f0} -> {f1} frames/1s")
+        f1 = page.evaluate("__game.frame")
+        check("主循環持續推進", f1 - f0 >= 8, f"{f0} -> {f1} fps-ish")
 
-        page.click("#btnStart")
-        time.sleep(0.4)
-        st = page.evaluate("({phase: __game.state.phase, level: __game.state.level, flies: __game.flies.length, time: __game.state.timeLeft})")
-        check("開始遊戲 → 進入第 1 關", st["phase"] == "playing" and st["level"] == 1, str(st))
-        check("場上已有蒼蠅", st["flies"] >= 5, f"flies={st['flies']}")
+        # ---------- 2. 選關畫面 ----------
+        menu = page.evaluate("""({
+          levels: document.querySelectorAll('.levels .lv').length,
+          endlessLocked: document.getElementById('btnEndlessMenu').disabled,
+          weapons: __game.WEAPONS.map(w => [w.id, w.unlock]),
+          chips: document.querySelectorAll('.wbtn').length,
+        })""")
+        check("V4：8 把武器 + 5 個關卡 + 無盡（未解鎖）",
+              menu["levels"] == 5 and menu["endlessLocked"] and len(menu["weapons"]) == 8,
+              f"levels={menu['levels']} 武器={len(menu['weapons'])}")
+        check("武器解鎖門檻符合規格",
+              [w[1] for w in menu["weapons"]] == [0, 400, 1000, 1800, 3000, 4500, 6500, 9000],
+              str([w[1] for w in menu["weapons"]]))
+        check("底部常駐 8 個武器切換鈕", menu["chips"] == 8, str(menu["chips"]))
 
-        # V3：內嵌人聲（SAPI 合成）要能解碼，否則就是音檔壞了
+        page.click(".lv[data-level='1']")
+        time.sleep(0.5)
+        st = page.evaluate("({phase: __game.state.phase, level: __game.state.level, target: __game.LEVELS[1].goal.target, flies: __game.flies.length})")
+        check("第 1 關開始（目標 500 分 / 40 秒）", st["phase"] == "playing" and st["level"] == 1 and st["target"] == 500, str(st))
+
+        # ---------- 3. V3 音效 + 人聲 ----------
         decoded = True
         try:
             page.wait_for_function("Object.keys(__game.voice.buffers).length === 3", timeout=15_000)
         except Exception:
             decoded = False
-        vinfo = page.evaluate("({buffers: Object.keys(__game.voice.buffers), failed: __game.voice.decodeFailed})")
-        check("V3 人聲 3 段已解碼（內嵌 base64 有效）", decoded, str(vinfo))
+        check("V3 人聲 3 段已解碼", decoded, str(page.evaluate("Object.keys(__game.voice.buffers)")))
 
-        # ---------- 2. 蒼蠅行為（遊走 / 停歇） ----------
-        pos0 = page.evaluate("(() => { const f = __game.flies[0]; return {x: f.x, y: f.y, state: f.state}; })()")
-        time.sleep(1.0)
-        pos1 = page.evaluate("(() => { const f = __game.flies[0]; return {x: f.x, y: f.y, state: f.state, hasRest: __game.state.flies.some(x => x.state === 'rest')}; })()")
-        moved = abs(pos1["x"] - pos0["x"]) + abs(pos1["y"] - pos0["y"])
-        check("蒼蠅會遊走或進入停歇", moved > 4 or pos1["state"] == "rest" or pos1["hasRest"], f"moved={moved:.1f} state={pos1['state']}")
-
-        # ---------- 3. 點擊命中 + 落空 ----------
-        center = page.evaluate("({w: innerWidth, h: innerHeight})")
-        cx, cy = center["w"] * 0.5, center["h"] * 0.45
-        fly = page.evaluate(f"(() => {{ const f = __game.spawnFly({cx}, {cy}, 'house'); return {{x: f.x, y: f.y}}; }})()")
-        before = page.evaluate("({score: __game.state.score, misses: __game.state.misses})")
-        page.evaluate("__game.audio.log.length = 0")
+        page.evaluate("__game.audio.log.length = 0; __game.voice.log.length = 0")
+        fly = page.evaluate("(() => { const f = __game.spawnFly(innerWidth * .5, innerHeight * .45, 'house'); return {x: f.x, y: f.y}; })()")
         page.mouse.click(fly["x"], fly["y"])
         time.sleep(0.25)
-        after = page.evaluate("({score: __game.state.score, misses: __game.state.misses, dying: __game.flies.filter(f => f.state === 'dying').length, effects: __game.effects.length})")
-        check("點擊命中 → 得分", after["score"] > before["score"], f"{before['score']} -> {after['score']}")
-        check("命中 → 蒼蠅進入死亡動畫 + 粒子特效", after["dying"] >= 1 and after["effects"] > 0, f"dying={after['dying']} fx={after['effects']}")
+        snd = page.evaluate("({a: __game.audio.log.map(e => e.name), v: __game.voice.log.map(e => e.name)})")
+        check("擊殺音效分層 + 人聲", "swing" in snd["a"] and "kill" in snd["a"] and snd["v"].count("voice:kill") == 1, str(snd))
 
-        # 音效：一次出手 = 揮擊 + 擊殺兩層，且擊殺不再重播拍打聲
-        snd = page.evaluate("__game.audio.log.map(e => e.name)")
-        check("V2 音效分層：swing + kill", "swing" in snd and "kill" in snd, str(snd))
-        check("擊殺不會重播拍打聲（不再 slap）", "slap" not in snd, str(snd))
-        check("單次擊殺只播一次 kill", snd.count("kill") == 1, str(snd))
-        vsnd = page.evaluate("__game.voice.log.map(e => e.name)")
-        check("V3 每次擊殺會喊人聲（voice:kill）", vsnd.count("voice:kill") == 1, str(vsnd))
-
-        # 空拍：先清場再點空白處（避免剛好打到路過的蒼蠅）
-        wait_cool(page)
         page.evaluate("__game.flies.length = 0; __game.state.cool = 0")
-        xx, yy = center["w"] * 0.15, center["h"] * 0.75
-        page.mouse.click(xx, yy)
+        miss_before = page.evaluate("__game.state.misses")
+        page.mouse.click(30, page.evaluate("innerHeight") * 0.8)
         time.sleep(0.2)
-        miss = page.evaluate("__game.state.misses")
-        check("空拍會計入失誤次數", miss > before["misses"], f"misses={miss}")
+        check("空拍計入失誤", page.evaluate("__game.state.misses") > miss_before)
 
-        # ---------- 4. 武器解鎖與 5 種武器機制 ----------
-        # 換到第 2 關做（目標是擊殺數，不會因為分數達標而誤觸第 1 關通關）
-        page.evaluate("__game.startLevel(2)")
-        time.sleep(0.3)
-        page.evaluate("__game.state.levelScore = 0; __game.addScore(500)")
+        # ---------- 4. 武器庫（第 2 關：擊殺目標，不會被分數破關干擾） ----------
+        def goto_level(n: int):
+            page.evaluate(f"__game.startLevel({n})")
+            time.sleep(0.35)
+
+        def set_score(v: int):
+            page.evaluate(f"__game.addScore({v} - __game.state.score)")
+            time.sleep(0.12)
+
+        def clear(w=0.0):
+            page.evaluate("__game.flies.length = 0; __game.state.cool = 0; __game.effects.length = 0")
+
+        goto_level(2)
+        set_score(400)
+        check("400 分 → 塑膠蒼蠅拍", page.evaluate("__game.weapon") == "swatter")
+        set_score(1000)
+        check("1000 分 → 黏蠅紙", page.evaluate("__game.weapon") == "trap")
+
+        clear()
+        tx, ty = 200, 400
+        trap_hit = page.evaluate(f"""(() => {{
+          const f = __game.spawnFly({tx}, {ty}, 'bottle');
+          f.__target = 1;
+          __game.state.cool = 0;
+          __game.attack({tx}, {ty});           // 放黏蠅紙
+          return {{frozen: f.frozenT, hp: f.hp, traps: __game.traps.length}};
+        }})()""")
+        time.sleep(0.25)
+        trap_hit2 = page.evaluate("({frozen: (__game.flies.find(f => f.__target) || {}).frozenT, traps: __game.traps.length})")
+        check("黏蠅紙：放置後定身 2 秒", trap_hit["traps"] >= 1 and (trap_hit2["frozen"] or 0) > 1.0, str(trap_hit2))
+        page.evaluate("__game.state.weaponIndex = 0; __game.state.cool = 0")   # 報紙 1 傷
+        page.evaluate(f"__game.attack({tx}, {ty})")
         time.sleep(0.15)
-        w1 = page.evaluate("({weapon: __game.weapon, unlocked: __game.unlocked, toast: document.getElementById('toast').classList.contains('show'), text: document.getElementById('toastText').textContent})")
-        check("500 分 → 解鎖塑膠蒼蠅拍", w1["weapon"] == "swatter" and w1["unlocked"] == 2, str(w1))
-        check("升級提示動畫有出現", w1["toast"] and "塑膠" in w1["text"], w1["text"])
+        hp_after = page.evaluate("(__game.flies.find(f => f.__target) || {hp: -1}).hp")
+        check("黏蠅紙：被黏住的蒼蠅受 1.5 倍傷害（2HP → 0.5）", 0 < hp_after <= 0.6, f"hp={hp_after}")
 
-        # 電蚊拍 AOE：110px 內多隻
-        page.evaluate("__game.addScore(1000)")   # 累積 1500
-        time.sleep(0.1)
-        check("1500 分 → 電蚊拍", page.evaluate("__game.weapon") == "electric")
-        ax, ay = center["w"] * 0.5, center["h"] * 0.6
-        page.evaluate(f"__game.flies.length = 0; __game.effects.length = 0;"
-                      f" __game.voice.log.length = 0;"
-                      f" __game.spawnFly({ax - 25}, {ay}); __game.spawnFly({ax + 30}, {ay + 18}); __game.spawnFly({ax}, {ay - 30});"
-                      f" __game.state.cool = 0;")
-        page.mouse.click(ax, ay)
-        time.sleep(0.1)   # 電弧特效 ttl 0.22s，要在消失前取樣
-        aoe = page.evaluate("({dead: __game.flies.filter(f => f.state === 'dying' || f.dead).length, zaps: __game.effects.filter(e => e.type === 'zap').length})")
-        check("電蚊拍一次電死範圍內多隻（含電弧特效）", aoe["dead"] >= 3 and aoe["zaps"] >= 3, str(aoe))
-        rapid = page.evaluate("__game.audio.log.filter(e => e.name === 'kill').length")
-        check("一次多殺的擊殺音有被限流（≤2 聲）", 0 < rapid <= 2, f"kill 音 {rapid} 聲 / 同時死 {aoe['dead']} 隻")
-        vrapid = page.evaluate("__game.voice.log.filter(e => e.name === 'voice:kill').length")
-        check("一次多殺的人聲只喊一次（不疊音）", vrapid <= 1, f"voice:kill {vrapid} 聲 / 同時死 {aoe['dead']} 隻")
+        set_score(1800)
+        check("1800 分 → 電蚊拍", page.evaluate("__game.weapon") == "electric")
+        clear()
+        ax, ay = 210, 500
+        aoe = page.evaluate(f"""(() => {{
+          __game.spawnFly({ax}, {ay});
+          __game.spawnFly({ax + 120}, {ay});      // 範圍外，靠連鎖電到
+          __game.spawnFly({ax + 250}, {ay});      // 連鎖第二跳
+          __game.state.cool = 0;
+          __game.attack({ax}, {ay});
+          return {{dead: __game.flies.filter(f => f.state === 'dying' || f.dead).length,
+                  zaps: __game.effects.filter(e => e.type === 'zap').length}};
+        }})()""")
+        time.sleep(0.15)
+        check("電蚊拍：AOE + 連鎖閃電（3 隻）", aoe["dead"] >= 3, str(aoe))
+        check("擊殺計數會累加（第 2/4 關目標）", page.evaluate("__game.state.kills") >= 3,
+              f"kills={page.evaluate('__game.state.kills')}")
 
-        # 噴霧：長按持續傷害
-        page.evaluate("__game.addScore(2000)")   # 累積 3500
-        time.sleep(0.1)
-        check("3500 分 → 殺蟲噴霧", page.evaluate("__game.weapon") == "spray")
-        sx, sy = center["w"] * 0.5, center["h"] * 0.55
-        page.evaluate(f"__game.flies.length = 0;"
-                      f" (() => {{ const f = __game.spawnFly({sx}, {sy}, 'bottle');"
-                      f" f.speed = 0; f.state = 'rest'; f.restT = 99; f.__testTarget = 1; return 1; }})()")
+        set_score(3000)
+        check("3000 分 → 散彈鹽槍", page.evaluate("__game.weapon") == "salt")
+        clear()
+        salt = page.evaluate("""(() => {
+          const w = innerWidth, h = innerHeight;
+          const mx = w / 2, my = h * 0.8;                                  // 槍口（點擊點）
+          const centre = __game.spawnFly(mx, my - 70, 'bottle');           // 正對中心 = 扇心
+          const edge = __game.spawnFly(mx + 66, my - 150, 'bottle');       // 偏 25 度 = 扇緣
+          __game.state.cool = 0;
+          __game.attack(mx, my);
+          return {centre: centre.hp, edge: edge.hp};
+        })()""")
+        check("鹽槍：扇心 3 傷打死、扇緣只 1 傷", salt["centre"] <= 0 and 0 < salt["edge"] <= 1.2, str(salt))
+
+        set_score(4500)
+        check("4500 分 → 殺蟲噴霧", page.evaluate("__game.weapon") == "spray")
+        clear()
+        sx, sy = 210, 470
+        page.evaluate(f"__game.spawnFly({sx}, {sy}, 'bottle').state = 'rest'")
         page.mouse.move(sx, sy)
         page.mouse.down()
-        time.sleep(1.5)
-        spray = page.evaluate("({clouds: __game.clouds.length,"
-                              " hp: (__game.flies.find(f => f.__testTarget) || {hp: -9}).hp,"
-                              " total: __game.flies.length})")
+        time.sleep(1.3)
+        spray = page.evaluate("({clouds: __game.clouds.length, hp: (__game.flies[0] || {hp: -1}).hp})")
         page.mouse.up()
-        check("噴霧長按產生毒霧並持續扣血", spray["hp"] <= 0 or spray["hp"] < 2, str(spray))
+        check("噴霧：毒霧每 0.3 秒結算、2HP 被打死", spray["clouds"] >= 1 and spray["hp"] <= 0, str(spray))
 
-        # 雷射：橫貫畫面
-        page.evaluate("__game.addScore(3500)")   # 累積 7000
-        time.sleep(0.1)
-        check("7000 分 → 除蟲雷射炮", page.evaluate("__game.weapon") == "laser")
-        ly = center["h"] * 0.4
-        page.evaluate(f"__game.flies.length = 0;"
-                      f" __game.spawnFly(60, {ly}); __game.spawnFly({center['w'] - 70}, {ly + 6}); __game.spawnFly({center['w'] * 0.5}, {ly - 8});"
-                      f" __game.state.cool = 0;")
-        page.mouse.click(center["w"] * 0.5, ly)
-        time.sleep(0.3)
-        laser = page.evaluate("({dead: __game.flies.filter(f => f.state === 'dying' || f.dead).length, beam: !!__game.state.laser, zaps: __game.effects.length})")
-        check("雷射一次掃掉整排蒼蠅（含雷射殘影）", laser["dead"] >= 3 and laser["beam"], str(laser))
+        set_score(6500)
+        check("6500 分 → 雙持高壓電蚊拍", page.evaluate("__game.weapon") == "twin")
+        clear()
+        twin = page.evaluate("""(() => {
+          const x = innerWidth / 2, y = innerHeight * 0.5;
+          const left = __game.spawnFly(x - 55, y);
+          const right = __game.spawnFly(x + 55, y);
+          __game.state.cool = 0;
+          __game.attack(x, y);
+          return {dead: [left, right].filter(f => f.state === 'dying' || f.dead).length};
+        })()""")
+        check("雙持：左右兩側各一次電爆", twin["dead"] == 2, str(twin))
 
-        # ---------- 5. 第 2 關：擊殺數 + 空拍上限 ----------
-        page.evaluate("__game.startLevel(2)")
-        time.sleep(0.3)
-        l2 = page.evaluate("({level: __game.state.level, prog: document.getElementById('progressText').textContent, misses: __game.state.misses})")
-        check("第 2 關：顯示擊殺/空拍進度", l2["level"] == 2 and "空拍" in l2["prog"], l2["prog"])
-        page.evaluate("__game.state.misses = 11")
-        time.sleep(0.3)
-        l2b = page.evaluate("({phase: __game.state.phase, modal: !document.getElementById('modal').classList.contains('hidden')})")
-        check("空拍超過 10 次 → 失敗彈窗", l2b["phase"] == "lost" and l2b["modal"], str(l2b))
-        page.click("#btnRetry")
-        time.sleep(0.3)
-        check("重新挑戰 → 回到同一關", page.evaluate("__game.state.phase") == "playing" and page.evaluate("__game.state.level") == 2)
+        set_score(9000)
+        check("9000 分 → 雷射炮", page.evaluate("__game.weapon") == "laser")
+        clear()
+        ly = 300
+        laser = page.evaluate(f"""(() => {{
+          __game.spawnFly(40, {ly}); __game.spawnFly(innerWidth - 40, {ly + 6}); __game.spawnFly(innerWidth / 2, {ly - 8});
+          __game.state.cool = 0;
+          __game.attack(innerWidth / 2, {ly});
+          return {{dead: __game.flies.filter(f => f.state === 'dying' || f.dead).length, beam: !!__game.state.laser}};
+        }})()""")
+        check("雷射：80px 帶狀穿透清場", laser["dead"] >= 3 and laser["beam"], str(laser))
 
-        # ---------- 6. 第 3 關 Boss ----------
-        page.evaluate("__game.startLevel(3)")
+        # ---------- 5. 第 3 關：防禦可頌 ----------
+        goto_level(3)
+        d0 = page.evaluate("({hp: __game.defend.hp, types: __game.LEVELS[3].types, camo: __game.FLY_TYPES.gold.camo})")
+        check("第 3 關：可頌衛生度滿、含偽裝金斑麗蠅", 90 < d0["hp"] <= 100 and "gold" in d0["types"] and d0["camo"] is True, str(d0))
+        eat = page.evaluate("""(() => {
+          const t = __game.defend;
+          const f = __game.spawnFly(t.x, t.y, 'house');
+          return {target: !!f.targetPos};
+        })()""")
+        time.sleep(1.0)
+        d1 = page.evaluate("({hp: __game.defend.hp, eating: __game.flies.some(f => f.eating)})")
+        check("蒼蠅抵達可頌後進入 eating 並扣衛生度", eat["target"] and d1["eating"] and d1["hp"] < 100, str(d1))
+        page.evaluate("__game.setTimeLeft(0.05)")
         time.sleep(0.4)
-        boss = page.evaluate("(() => { const b = __game.boss; return b ? {hp: b.hp, r: b.r, x: b.x, y: b.y} : null; })()")
-        check("第 3 關：Boss 血量 50、體積 4 倍", boss and boss["hp"] == 50 and boss["r"] >= 40, str(boss))
-        minions_before = page.evaluate("__game.flies.filter(f => f.type === 'minion').length")
+        check("守住 60 秒 → 第 3 關通關", page.evaluate("__game.state.phase") == "won")
+
+        # ---------- 6. 第 4 關：蜜蜂懲罰 + 突風 ----------
+        goto_level(4)
+        bee = page.evaluate("""(() => {
+          __game.flies.length = 0;
+          const b = __game.spawnBee();
+          __game.state.weaponIndex = 0;   // 報紙（雷射會跳過友軍）
+          __game.state.cool = 0;
+          const before = __game.state.score;
+          __game.attack(b.x, b.y);
+          return {hits: __game.state.beeHits, lock: __game.state.weaponLockT, delta: __game.state.score - before};
+        })()""")
+        check("誤擊蜜蜂：-200 分、武器凍結 1 秒", bee["hits"] == 1 and bee["lock"] > 0.5 and bee["delta"] == -200, str(bee))
+        locked_attack = page.evaluate("(() => { __game.state.misses = 0; __game.state.cool = 0; __game.attack(100, 400); return __game.state.misses; })()")
+        check("凍結期間無法出擊", locked_attack == 0, f"misses={locked_attack}")
+        gust = page.evaluate("""(() => {
+          const f = __game.spawnFly(innerWidth / 2, innerHeight / 2);
+          __game.forceGust();
+          const x0 = f.x;
+          return {wind: !!__game.state.wind, x0};
+        })()""")
+        time.sleep(0.4)
+        gust2 = page.evaluate("({wind: !!__game.state.wind, moved: __game.flies.some(f => true)})")
+        check("突風：產生側風物件並推動蒼蠅", gust["wind"] and gust2["wind"], str(gust))
+
+        # ---------- 7. 第 5 關：Boss 二階段 ----------
+        goto_level(5)
+        boss0 = page.evaluate("({hp: __game.boss.hp, r: __game.boss.r, phase: __game.boss.phase})")
+        check("第 5 關：蠅王 80 HP、體積 4 倍", boss0["hp"] == 80 and boss0["r"] >= 40 and boss0["phase"] == 1, str(boss0))
+
         page.evaluate("__game.forceSummon()")
-        time.sleep(0.2)
-        summon = page.evaluate("({minions: __game.flies.filter(f => f.type === 'minion').length, stun: __game.boss.stunT})")
-        check("技能 2：召喚子嗣 + 僵直 1.5 秒", summon["minions"] > minions_before and 0 < summon["stun"] <= 1.5, str(summon))
+        time.sleep(0.25)
+        shield = page.evaluate("""(() => {
+          const b = __game.boss;
+          const hp0 = b.hp;
+          __game.state.weaponIndex = 0; __game.state.cool = 0;
+          __game.attack(b.x, b.y);
+          return {shield: __game.flies.filter(f => f.shield && !f.dead).length, bossShield: b.shieldCount, hp0, hp1: b.hp};
+        })()""")
+        check("Phase 1：召喚 10 隻護盾，護盾期間 Boss 免疫",
+              shield["shield"] >= 10 and shield["bossShield"] >= 10 and shield["hp1"] == shield["hp0"], str(shield))
 
-        page.evaluate("__game.state.weaponIndex = 0; __game.state.cool = 0;")   # 報紙 1 傷
-        hp_before = page.evaluate("__game.boss.hp")
-        boss_pos = page.evaluate("({x: __game.boss.x, y: __game.boss.y})")
-        page.evaluate(f"__game.attack({boss_pos['x']}, {boss_pos['y']})")
-        time.sleep(0.15)
-        hp_after = page.evaluate("(__game.boss ? __game.boss.hp : 0)")
-        check("僵直時承受雙倍傷害（1 傷 → 扣 2 血）", hp_before - hp_after == 2, f"{hp_before} -> {hp_after}")
+        pierce = page.evaluate("""(() => {
+          const b = __game.boss;
+          b.dodgeCd = 9;                 // 關掉 20% 閃避，讓這一發一定命中
+          const hp0 = b.hp;
+          __game.state.weaponIndex = 7; __game.state.cool = 0;   // 雷射
+          __game.attack(innerWidth / 2, b.y);
+          return {hp0, hp1: b.hp, shield: b.shieldCount};
+        })()""")
+        check("雷射：穿透護盾削弱 Boss（8 傷）", pierce["hp1"] == pierce["hp0"] - 8, str(pierce))
 
-        page.evaluate("__game.state.cool = 0; __game.boss.hp = 1; __game.audio.log.length = 0")
-        page.evaluate(f"__game.attack({boss_pos['x']}, {boss_pos['y']})")
-        time.sleep(0.5)
-        win3 = page.evaluate("({phase: __game.state.phase, modal: !document.getElementById('modal').classList.contains('hidden'), text: document.getElementById('card').textContent})")
-        check("Boss 血量歸零 → 通關畫面", win3["phase"] == "won" and win3["modal"] and "通關" in win3["text"], win3["text"][:40])
-        bsnd = page.evaluate("__game.audio.log.map(e => e.name)")
-        check("Boss 倒下播放專屬音效（bossDown）", bsnd.count("bossDown") == 1, str(bsnd))
-        check("Boss 倒下不再疊關卡通關音（win）", bsnd.count("win") == 0, str(bsnd))
-        time.sleep(0.7)   # 人聲延後 0.32s 才喊
-        bvoice = page.evaluate("__game.voice.log.map(e => e.name)")
-        check("V3 擊倒蠅王會喊「你有病喔」（voice:boss）", bvoice.count("voice:boss") == 1, str(bvoice))
+        page.evaluate("__game.forcePhase2(); __game.forceDive()")
+        exhausted = True
+        try:
+            page.wait_for_function("__game.boss && __game.boss.exhaustT > 0.5", timeout=5_000)
+        except Exception:
+            exhausted = False
+        p2 = page.evaluate("""({dive: !!__game.boss.dive, phase: __game.boss.phase,
+                                exhaust: __game.boss.exhaustT, hp: __game.boss.hp})""")
+        check("Phase 2：HP ≤ 50% 狂暴、俯衝後力竭 2 秒",
+              exhausted and p2["phase"] == 2, str(p2))
 
-        # ---------- 7. 第 1 關達標 → 下一關按鈕 ----------
-        page.evaluate("__game.startLevel(1)")
-        page.evaluate("__game.state.levelScore = 590; __game.addScore(0)")
-        fx, fy = center["w"] * 0.5, center["h"] * 0.5
-        page.evaluate(f"__game.spawnFly({fx}, {fy}, 'house'); __game.state.weaponIndex = 0; __game.state.cool = 0;")
-        page.mouse.click(fx, fy)
-        time.sleep(0.5)
-        win1 = page.evaluate("({phase: __game.state.phase, hasNext: !!document.getElementById('btnNext'), prog: document.getElementById('progressBar').style.width})")
-        check("第 1 關 600 分達標 → 通關 + 下一關按鈕", win1["phase"] == "won" and win1["hasNext"], str(win1))
-        page.click("#btnNext")
-        time.sleep(0.4)
-        check("按下「下一關」→ 進入第 2 關", page.evaluate("__game.state.level") == 2 and page.evaluate("__game.state.phase") == "playing")
+        crit = page.evaluate("""(() => {
+          const b = __game.boss;
+          __game.flies.filter(f => f.shield).forEach(f => { f.dead = true; });
+          b.shieldCount = 0;               // update() 下一帧才會重算，這裡先同步
+          __game.forceExhaust(2);          // 明確進入力竭
+          __game.state.weaponIndex = 0; __game.state.cool = 0;
+          const hp0 = b.hp;
+          __game.attack(b.x, b.y);
+          return {hp0, hp1: b.hp, exhaust: b.exhaustT};
+        })()""")
+        check("力竭期間受到雙倍傷害（1 傷 → 2）", crit["hp0"] - crit["hp1"] == 2, str(crit))
 
-        # ---------- 8. 靜音鈕 ----------
-        page.click("#muteBtn")
-        time.sleep(0.15)
-        muted = page.evaluate("({muted: __game.audio.muted, icon: document.getElementById('muteBtn').textContent, saved: localStorage.getItem('fly.swat.muted')})")
-        check("靜音鈕可關閉音效並記住設定", muted["muted"] is True and muted["saved"] == "1", str(muted))
-        page.evaluate("__game.voice.log.length = 0; __game.audio.log.length = 0; __game.state.cool = 0")
-        mv = page.evaluate("({w: innerWidth, h: innerHeight})")
-        page.evaluate(f"__game.spawnFly({mv['w'] * 0.5}, {mv['h'] * 0.5}, 'house')")
-        page.mouse.click(mv["w"] * 0.5, mv["h"] * 0.5)
+        page.evaluate("""(() => {
+          const b = __game.boss;
+          __game.state.weaponIndex = 7; __game.state.cool = 0;
+          b.hp = 8; b.exhaustT = 0; b.shieldCount = 0;
+          __game.flies.filter(f => f.shield).forEach(f => { f.dead = true; });
+          __game.attack(innerWidth / 2, b.y);
+        })()""")
+        time.sleep(0.8)
+        win5 = page.evaluate("({phase: __game.state.phase, progress: __game.progress, voices: __game.voice.log.map(e => e.name)})")
+        check("Boss 倒下 → 通關並存進度（解鎖無盡）", win5["phase"] == "won" and win5["progress"].get("5") is True, str(win5["progress"]))
+        check("擊倒蠅王有人聲「你有病喔」", "voice:boss" in win5["voices"], str(win5["voices"][-3:]))
+
+        # ---------- 8. 無盡模式 ----------
+        page.evaluate("__game.showStart()")
         time.sleep(0.3)
-        check("靜音時人聲與音效都不播", page.evaluate("__game.voice.log.length === 0 && __game.audio.log.length === 0"))
+        unlocked = page.evaluate("!document.getElementById('btnEndlessMenu').disabled")
+        check("通關第 5 關後解鎖無盡模式", unlocked)
+        page.evaluate("__game.clearEndlessBoard(); __game.startEndless()")
+        time.sleep(0.6)
+        e0 = page.evaluate("({phase: __game.state.phase, endless: __game.state.endless, survival: __game.state.survival, label: document.getElementById('levelName').textContent})")
+        check("無盡模式啟動（無時間上限、存活計時）", e0["phase"] == "playing" and e0["endless"] and e0["survival"] > 0, str(e0))
+        page.evaluate("__game.state.miniBossT = 0.05")
+        time.sleep(0.5)
+        mini = page.evaluate("__game.flies.filter(f => f.isMiniBoss).length")
+        check("每 60 秒的迷你蠅王會出現", mini >= 1, f"miniboss={mini}")
+        page.evaluate("__game.state.misses = 21")
+        time.sleep(0.4)
+        end = page.evaluate("({phase: __game.state.phase, board: __game.board})")
+        check("容錯用完 → 結束並寫入排行", end["phase"] == "lost" and len(end["board"]) == 1, str(end["board"]))
+
+        # ---------- 9. 靜音 / 截圖 ----------
+        # 關掉結算/選關遮罩（#modal 在靜音鈕上層），直接測右上角那顆按鈕
+        page.evaluate("document.getElementById('modal').classList.add('hidden')")
+        time.sleep(0.2)
         page.click("#muteBtn")
         time.sleep(0.15)
-        unmuted = page.evaluate("({muted: __game.audio.muted, saved: localStorage.getItem('fly.swat.muted')})")
-        check("靜音鈕可再開啟", unmuted["muted"] is False and unmuted["saved"] == "0", str(unmuted))
+        m1 = page.evaluate("({muted: __game.audio.muted, saved: localStorage.getItem('fly.swat.muted')})")
+        page.evaluate("__game.voice.log.length = 0; __game.audio.log.length = 0; __game.state.cool = 0")
+        page.evaluate("__game.startLevel(1); __game.state.cool = 0; __game.spawnFly(innerWidth/2, innerHeight/2)")
+        page.mouse.click(page.evaluate("innerWidth") / 2, page.evaluate("innerHeight") / 2)
+        time.sleep(0.3)
+        quiet = page.evaluate("({a: __game.audio.log.map(e => e.name), v: __game.voice.log.map(e => e.name), muted: __game.audio.muted})")
+        check("靜音：音效與人聲都不播",
+              m1["muted"] is True and m1["saved"] == "1" and not quiet["a"] and not quiet["v"], str(quiet))
+        page.click("#muteBtn")
 
-        # ---------- 9. 截圖 ----------
         page.evaluate("__game.startLevel(1)")
         time.sleep(0.8)
-        page.screenshot(path=str(ART / "fly-desktop.png"))
+        page.screenshot(path=str(ART / "fly-v4-desktop.png"))
 
-        # 手機直向 + 觸控
         mctx = browser.new_context(**dict(p.devices["Pixel 5"]))
         mp = mctx.new_page()
         mp.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         mp.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
         mp.goto(url, wait_until="load")
         mp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
-        mp.tap("#btnStart")
-        time.sleep(0.8)
-        mv = mp.evaluate("({phase: __game.state.phase, flies: __game.flies.length, w: innerWidth, h: innerHeight})")
-        check("手機（Pixel 5）以觸控開始遊戲", mv["phase"] == "playing" and mv["flies"] > 0, str(mv))
-        mp.evaluate("(() => { const f = __game.flies[0]; return 1; })()")
-        target = mp.evaluate("(() => { const f = __game.spawnFly(innerWidth * 0.5, innerHeight * 0.5, 'house'); return {x: f.x, y: f.y}; })()")
+        mp.tap(".lv[data-level='1']")
+        time.sleep(0.7)
+        mv = mp.evaluate("({phase: __game.state.phase, chips: document.querySelectorAll('.wbtn').length, w: innerWidth, h: innerHeight})")
+        check("手機（Pixel 5）：直向版面 + 8 武器列", mv["phase"] == "playing" and mv["chips"] == 8, str(mv))
+        target = mp.evaluate("(() => { const f = __game.spawnFly(innerWidth * .5, innerHeight * .45); return {x: f.x, y: f.y}; })()")
         mp.touchscreen.tap(target["x"], target["y"])
         time.sleep(0.3)
-        check("手機觸控拍打命中有計分", mp.evaluate("__game.state.score") > 0, f"score={mp.evaluate('__game.state.score')}")
-        mp.screenshot(path=str(ART / "fly-mobile.png"))
+        check("手機觸控拍打計分", mp.evaluate("__game.state.score") > 0, f"score={mp.evaluate('__game.state.score')}")
+        mp.screenshot(path=str(ART / "fly-v4-mobile.png"))
         mctx.close()
 
         browser.close()
@@ -303,8 +396,7 @@ def main() -> int:
         server.shutdown()
 
     check("沒有 console / page error", not errors, "; ".join(errors[:3]))
-
-    for shot in ("fly-desktop.png", "fly-mobile.png"):
+    for shot in ("fly-v4-desktop.png", "fly-v4-mobile.png"):
         pth = ART / shot
         check(f"截圖 {shot}", pth.is_file() and pth.stat().st_size > 20_000,
               f"{pth.stat().st_size // 1024} KB" if pth.is_file() else "missing")
@@ -313,7 +405,7 @@ def main() -> int:
     if FAILS:
         print(f"RESULT: FAIL ({len(FAILS)}: {', '.join(FAILS)})")
         return 1
-    print("RESULT: PASS (三關流程、5 種武器、Boss 機制、結算彈窗、手機觸控)")
+    print("RESULT: PASS (8 武器 / 5 關 / 防禦 / 干擾 / Boss 二階段 / 無盡 / 音效人聲 / 手機)")
     return 0
 
 

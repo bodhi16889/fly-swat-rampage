@@ -1,193 +1,148 @@
-# 打擊蒼蠅大作戰 · Fly Swat Rampage — **V3（加入人聲）**
+# 打擊蒼蠅大作戰 · Fly Swat Rampage — **V4（8 武器 · 5 關 · 無盡模式）**
 
-手機 H5 單指觸控打蒼蠅遊戲。**單一 `index.html`、零依賴、Canvas 2D + Web Audio 即時合成音效**，
-直向滿版（`viewport-fit=cover` + `touch-action: none`），用手機瀏覽器打開就能玩。
+手機 H5 單指觸控打蒼蠅遊戲。**單一 `index.html`、零依賴、Canvas 2D + Web Audio 合成音效 + SAPI 人聲**，
+直向滿版（`viewport-fit=cover` + `touch-action: none`），手機瀏覽器打開就能玩。
 
 > 🌐 線上版：<https://bodhi16889.github.io/fly-swat-rampage/>
-> （另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)）
-
-## V3 加了什麼（人聲）
-
-| 時機 | 台詞 | 規則 |
-| :--- | :--- | :--- |
-| 每次擊殺蒼蠅 | **「什麼意思」**（兩段語氣交替） | 320ms 限流：正常節奏下每隻都喊；電蚊拍／雷射「一瞬間多殺」只喊一次，避免疊成噪音 |
-| 擊倒蠅王 | **「你有病喔」** | 在 `bossDown` 低頻倒塌後 0.32 秒才喊，不與爆炸聲打架 |
-
-**人聲怎麼來的（不需要外錄、仍是單檔）**
-
-1. 用 Windows SAPI 台灣中文語音 `Microsoft Hanhan (zh-TW)` 合成 → 完整 WAV。
-2. Python 裁掉前後靜音、正規化音量（峰值 0.9）。
-3. base64 內嵌進 `index.html`，由 `AudioContext.decodeAudioData()` 播放（同一個 master/壓縮器，
-   所以靜音鈕 🔊/🔇 也管得到人聲）。
-4. 若某台裝置解不開內嵌音檔，會自動退回瀏覽器 `SpeechSynthesis`（`lang: zh-TW`）念同樣台詞。
-
-`index.html` 因此從約 51 KB 變成約 196 KB（人聲 141 KB base64）；沒有新增任何外部檔案，
-`file://` 直接開也有聲音。
-
-**想換台詞**（例如改喊別的字）：
-
-```powershell
-# 1) 用 SAPI 合成（可換 Microsoft Hanhan / Yating / Zhiwei）
-Add-Type -AssemblyName System.Speech
-$s = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$s.SelectVoice('Microsoft Hanhan Desktop'); $s.Rate = 1
-$s.SetOutputToWaveFile("$env:LOCALAPPDATA\Temp\voicelines\kill_a.wav"); $s.Speak('什麼意思')
-```
-
-2) 重新產生 base64（裁靜音＋正規化＋**保留 WAV header**）後換掉 `index.html` 裡的 `VOICE_LINES`，
-   再跑 `python verify_smoke.py` 確認「人聲 3 段已解碼」仍為 PASS。
-
-## V2 改了什麼（音效）
-
-**問題（V1）**
-
-- 擊殺蒼蠅時，`die()` 又播了一次「報紙拍擊」→ 一次點擊同時有 **揮擊聲 + 擊殺拍擊聲** 兩層，聽起來像多打了一下。
-- Boss 倒下時觸發關卡通用勝利音（4 音上行），而且 Boss 死亡的音效與它重疊 → 一次爆出多層聲音，很吵、也很怪。
-
-**V2 做法（分層 + 限流 + 專屬音）**
-
-| 事件 | 音效 | 音量 / 規則 |
-| :--- | :--- | :--- |
-| 出手（含揮空） | `swing`：紙張／網拍／電擊三種質感 | 低（0.12–0.14），每次出手只有一聲 |
-| 命中未死（綠頭蠅第 1 下、Boss） | `hit`：短促敲擊 | 0.08–0.09 |
-| 擊殺 | `kill`：很輕的一聲「噗」 | 0.075，**60ms 限流**：一次電死 5 隻也只播 1–2 聲 |
-| 噴霧 / 雷射 | `spray` / `laser` | 0.14 / 0.2 |
-| Boss 倒下 | `bossDown`：110→40Hz 低頻倒塌 + 塵土低通噪音，**0.42s 後**才進 3 音勝利動機 | 0.26，且**不再**同時播關卡通關音 |
-| 母帶 | `master(0.4)` → `DynamicsCompressor(-18dB, ratio 6)` | 疊音不爆音 |
-
-另外新增右上角 **🔊 / 🔇 靜音鈕**（設定存在 `localStorage.fly.swat.muted`，重新整理仍保留），
-手機上嫌吵可以直接關掉。
-
-測試會檢查：單次擊殺是 `['swing','kill']`（不再有 `slap`）、多殺時 kill 音 ≤2 聲、
-Boss 倒下只有一個 `bossDown` 且 `win` 為 0 次、靜音鈕可切換並記住設定。
+> 另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)
 
 ## 玩法
 
 | 操作 | 說明 |
 | :--- | :--- |
-| 點擊 / 輕觸 | 拍打（依當前武器的判定半徑） |
-| 長按滑動 | 只有「殺蟲噴霧」需要：按住拖曳連續噴射毒霧 |
-| 底部武器列 | 已解鎖的武器可隨時點選切換 |
+| 點擊 / 輕觸 | 依當前武器判定（單點 / AOE / 扇形 / 陷阱 / 射線） |
+| 長按滑動 | 殺蟲噴霧：按住連續噴出毒霧 |
+| 底部武器列 | 已解鎖的 8 把武器常駐，可隨時點選切換 |
+| 選關卡 | 開場卡片可選已解鎖關卡；通過第 5 關解鎖無盡模式 |
 
-## 武器（依累積分數解鎖）
+## 武器（V4：8 把，雙分支）
 
-| 武器 | 解鎖分數 | 判定 | CD | 行為 |
-| :--- | ---: | :--- | ---: | :--- |
-| 📰 捲起來的報紙 | 初始 | 40 px | 0.35s | 單體，最近的一隻 |
-| 🏓 傳統塑膠蒼蠅拍 | 500 | 70 px | 0.25s | 單體、範圍更大，附網格震動 |
-| ⚡ 電蚊拍 | 1,500 | 110 px | 0.20s | **AOE**：範圍內所有蒼蠅一起電死（藍色電弧） |
-| 🧴 強效殺蟲噴霧 | 3,500 | 160 px | 0.10s | 按住連發，毒霧滯留 1.7 秒持續扣血 |
-| 🔫 終極除蟲雷射炮 | 7,000 | 全螢幕 | 1.0s | 以點擊高度為準，橫貫畫面掃掉整排（含殘影／灰化） |
+**精準爆發流**：報紙 → 塑膠拍 → 黏蠅紙 → 鹽槍　　**範圍清場流**：電蚊拍 → 噴霧 → 雙持電拍 → 雷射
 
-## 關卡
+| # | 武器 | 解鎖 | 判定 | CD | 機制 |
+| --: | :--- | --: | :--- | --: | :--- |
+| 1 | 📰 捲起來的報紙 | 初始 | 40 px 單點 | 0.35s | 單體最近，空拍無懲罰 |
+| 2 | 🏓 塑膠蒼蠅拍 | 400 | 70 px 單點 | 0.25s | 範圍更大＋網狀波紋粒子 |
+| 3 | 🪤 黏蠅紙陷阱板 | 1,000 | 120 px 延時區 | 1.20s | 放置 4 秒黏紙；路過蒼蠅**定身 2 秒**且受到 **1.5 倍傷害** |
+| 4 | ⚡ 電蚊拍 | 1,800 | 100 px AOE | 0.20s | 命中後**連鎖閃電**跳到最近 2 隻 |
+| 5 | 🧂 散彈鹽槍 | 3,000 | 60° / 180 px 扇形 | 0.45s | 槍口＝點擊點、朝畫面中心噴；**扇心 3 傷、扇緣 1 傷** |
+| 6 | 🧴 強效殺蟲噴霧 | 4,500 | 160 px 持續 | 0.20s | 毒霧 1.5 秒，**每 0.3 秒扣 1 血** |
+| 7 | ⚡⚡ 雙持高壓電蚊拍 | 6,500 | 雙點各 90 px | 0.15s | 點擊左右各一次電爆（清密集蟲群） |
+| 8 | 🔫 終極除蟲雷射炮 | 9,000 | 80 px 帶狀 | 0.80s | **穿透護盾/障礙**，一般蟲秒殺、Boss 8 傷（力竭雙倍） |
 
-| 關 | 場景 | 時間 | 通關條件 | 特殊機制 |
-| :-- | :--- | ---: | :--- | :--- |
-| 1 | 夏日客廳的西瓜切片 | 40s | 600 分 | 蒼蠅偶爾停在西瓜上搓腳 → 擊殺**分數雙倍** |
-| 2 | 熱鬧的傳統菜市場 | 50s | 擊殺 40 隻 | 空拍超過 10 次即失敗；綠頭大蒼蠅 2 HP（被打中會慌亂加速）；果蠅群 5–8 隻成群高速移動 |
-| 3 | 後巷的廚餘垃圾桶 | 60s | 擊敗蠅王（50 HP）| Boss 體積 4 倍、25% 機率超音速閃避瞬移、每 10 秒召喚 5–7 隻子嗣；施放後**僵直 1.5 秒，受傷雙倍** |
+## 關卡（5 關 + 無盡）
 
-結算彈窗提供「重新挑戰」／「下一關」／（全破）「再玩一次」。
+| 關 | 場景 | 時間 | 通關條件 | 新機制 |
+| --: | :--- | --: | :--- | :--- |
+| 1 | 夏日客廳的西瓜切片 | 40s | 500 分 | 蒼蠅停在西瓜上搓腳 → 擊殺**雙倍分數** |
+| 2 | 熱鬧的傳統菜市場 | 50s | 擊殺 35 隻 | 空拍 >8 失敗；綠頭蠅 2HP、被打就狂暴加速；果蠅群 5–8 隻整團直線穿越 |
+| 3 | 麵包店的櫥窗保衛戰 | 60s | 守住可頌 60s | **防禦模式**：蒼蠅主動飛向可頌，抵達即 `eating`、每隻每秒扣 5 衛生度（100 起）；金斑麗蠅靜止時幾乎隱形（alpha 0.2） |
+| 4 | 戶外露營區的野餐墊 | 60s | 擊殺 50 隻 | **干擾陷阱**：蜜蜂是友軍，誤擊 −200 分＋武器凍結 1 秒，>2 次失敗；每 15 秒**突風**把蒼蠅掃向一側 |
+| 5 | 後巷廚餘桶的決戰 | 90s | 擊敗蠅王（80 HP）| **二階段**：P1「蒼蠅風暴」召喚 10 隻護盾子嗣（清光才能傷到王）；P2（≤50%）眼紅、速度 ×1.5、解鎖「音速俯衝」，衝完**力竭 2 秒受傷雙倍** |
+| ∞ | 無盡狂暴模式 | 無上限 | 容錯 20 次空拍 | 刷新速度隨時間上升、每 60 秒迷你蠅王、Combo 統計、**本機排行（存活秒數）** |
+
+## 音效與人聲（V2 / V3）
+
+- 分層音效：`swing`（出手）→ `hit`（命中未死）→ `kill`（擊殺，60ms 限流）→ `bossDown`（Boss 倒下專屬，0.42s 後才進勝利動機）。
+- 人聲（Windows SAPI `Microsoft Hanhan zh-TW` 預先合成、base64 內嵌）：擊殺喊「什麼意思」、擊倒蠅王喊「你有病喔」；320ms 限流避免多殺疊音。
+- 母帶：`master 0.4 → DynamicsCompressor(-18dB/ratio 6)`；右上角 🔊/🔇 一鍵靜音（`localStorage` 記憶），靜音時人聲與音效都不播。
 
 ## 快速啟動
 
 ```powershell
 cd C:\node24\fly-swat-rampage
-python -m http.server 8099          # 或 python -m http.server 8787（8099 被佔用時）
+python -m http.server 8099          # 8099 被佔用時改 8787
 # 開 http://127.0.0.1:8099/index.html
 ```
 
-> 不要用 8080（本機被 java 服務佔用會 `WinError 10013`）。直接雙擊 `index.html` 用 `file://` 也能跑
-> （沒有任何外部資源與 fetch），但 touch/pointer 行為在 http 下較一致，建議用 server。
->
-> 用手機測：`ipconfig | findstr /i IPv4` 取區網 IP → 手機開 `http://<IP>:8099/index.html`。
-> 公司 Wi-Fi 常有 client isolation，連不到就改開 **Windows 行動熱點**（手機連 PC）或直接玩線上版。
+> 不要用 8080（本機被 java 服務佔用，會 `WinError 10013`）。
+> 直接雙擊 `index.html`（`file://`）也能跑：沒有外部圖檔／音檔、沒有 fetch。
+> 手機測試：`ipconfig | findstr /i IPv4` → 手機開 `http://<IP>:8099/index.html`；
+> 公司 Wi-Fi 常有 client isolation，連不到就用線上版或開 Windows 行動熱點。
 
 ## 驗證（Playwright，可重跑）
 
 ```powershell
-python verify_smoke.py                                # 本機檔案，自動選空閒埠
-python verify_smoke.py --headed                       # 想看畫面
+python verify_smoke.py                                  # 本機，自動選空閒埠
+python verify_smoke.py --headed                         # 想看畫面
 python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-檢查項目（節錄）：
+覆蓋範圍（37 項）：
 
-- 版面：canvas 依 DPR 滿版、`touch-action: none`、主循環持續推進
-- 蒼蠅：會遊走、會進入停歇狀態
-- 打擊：點擊命中 → 得分 + 死亡動畫 + 粒子；空拍 → 失誤數 +1
-- 武器：500/1500/3500/7000 分依序解鎖並自動切換、升級提示動畫；電蚊拍一次電死 3 隻（含電弧）、
-  噴霧長按產生毒霧並以 DoT 打死 2 HP 綠頭蠅、雷射一次掃掉整排（含殘影）
-- 關卡：第 2 關顯示「擊殺 / 空拍」進度且空拍 >10 立即失敗；重新挑戰回到同一關
-- Boss：50 HP、體積 4 倍、召喚 5–7 隻子嗣並僵直 1.5 秒、僵直期 1 點傷害實扣 2 血、歸零後通關
-- 流程：第 1 關 600 分達標 → 通關 → 「下一關」真的進第 2 關
-- 手機：Pixel 5（觸控、393×727）以 `touchscreen.tap` 開始遊戲並拍中蒼蠅計分
-- 全程沒有 console / page error；截圖 `artifacts/fly-mobile.png`、`artifacts/fly-desktop.png`
+- 版面 / 主循環 / 選關卡（5 關 + 無盡未解鎖）/ 8 武器列
+- 武器門檻 `[0,400,1000,1800,3000,4500,6500,9000]`
+- 每把武器機制：黏蠅紙定身＋1.5 倍易傷、電蚊拍 AOE＋連鎖（3 隻）、鹽槍扇心 3 傷／扇緣 1 傷、
+  噴霧毒霧 tick、雙持左右兩擊、雷射穿透清場
+- 擊殺計數（第 2/4 關目標）
+- 第 3 關：可頌衛生度被 `eating` 扣血、守住 60 秒通關
+- 第 4 關：誤擊蜜蜂 −200＋武器凍結（凍結期間無法出擊）、突風物件
+- 第 5 關：80 HP、護盾 10 隻時 Boss 免疫、雷射穿透 −8、Phase 2 俯衝後力竭、
+  力竭期間 1 傷實扣 2、通關寫入進度並解鎖無盡
+- 無盡：存活計時、迷你蠅王、容錯用完寫入排行
+- 音效分層＋人聲（擊殺／蠅王）＋靜音完全靜音
+- 手機 Pixel 5：直向版面、8 武器列、觸控拍打計分
+- 全程無 console / page error
 
 最近一次結果：
 
 ```
-[PASS] 開始遊戲 → 進入第 1 關 / 場上已有蒼蠅 / 蒼蠅會遊走或進入停歇
-[PASS] 點擊命中 → 得分 / 死亡動畫 + 粒子特效 / 空拍會計入失誤次數
-[PASS] 500 分 → 塑膠拍（含升級提示動畫）
-[PASS] 電蚊拍一次電死範圍內多隻（含電弧特效） {'dead': 3, 'zaps': 3}
-[PASS] 噴霧長按產生毒霧並持續扣血 {'clouds': 13, 'hp': -9}
-[PASS] 雷射一次掃掉整排蒼蠅（含雷射殘影）
-[PASS] 第 2 關：顯示擊殺/空拍進度 / 空拍超過 10 次 → 失敗彈窗 / 重新挑戰
-[PASS] 第 3 關：Boss 血量 50、體積 4 倍 / 召喚子嗣 + 僵直 1.5 秒
-[PASS] 僵直時承受雙倍傷害（1 傷 → 扣 2 血） 50 -> 48
-[PASS] Boss 血量歸零 → 通關畫面
-[PASS] 第 1 關 600 分達標 → 通關 + 下一關按鈕 → 進入第 2 關
-[PASS] V2 音效分層：swing + kill — ['swing', 'kill']
-[PASS] 擊殺不會重播拍打聲（不再 slap）
-[PASS] 一次多殺的擊殺音有被限流（≤2 聲） — kill 音 2 聲 / 同時死 3 隻
-[PASS] Boss 倒下播放專屬音效（bossDown） — ['swing', 'hit', 'bossDown']
-[PASS] Boss 倒下不再疊關卡通關音（win）
-[PASS] V3 人聲 3 段已解碼（內嵌 base64 有效） — buffers ['kill_a','boss','kill_b']
-[PASS] V3 每次擊殺會喊人聲（voice:kill） / 一次多殺的人聲只喊一次
-[PASS] V3 擊倒蠅王會喊「你有病喔」（voice:boss）
-[PASS] 靜音鈕可關閉音效並記住設定 / 靜音時人聲與音效都不播 / 可再開啟
-[PASS] 手機（Pixel 5）以觸控開始遊戲 / 手機觸控拍打命中有計分
+[PASS] V4：8 把武器 + 5 個關卡 + 無盡（未解鎖） / 武器解鎖門檻符合規格 / 底部常駐 8 個武器切換鈕
+[PASS] 擊殺音效分層 + 人聲 / 空拍計入失誤
+[PASS] 黏蠅紙：定身 2 秒 / 受 1.5 倍傷害（2HP → 0.5）
+[PASS] 電蚊拍：AOE + 連鎖閃電（3 隻） / 擊殺計數會累加
+[PASS] 鹽槍：扇心 3 傷打死、扇緣只 1 傷 — {'centre': -4, 'edge': 1}
+[PASS] 噴霧：毒霧每 0.3 秒結算、2HP 被打死
+[PASS] 雙持：左右兩側各一次電爆 / 雷射：80px 帶狀穿透清場
+[PASS] 第 3 關：可頌衛生度滿、含偽裝金斑麗蠅 / 蒼蠅抵達可頌後 eating 扣血 / 守住 60 秒通關
+[PASS] 誤擊蜜蜂：-200 分、武器凍結 1 秒 / 凍結期間無法出擊 / 突風
+[PASS] 第 5 關：蠅王 80 HP、體積 4 倍
+[PASS] Phase 1：召喚 10 隻護盾，護盾期間 Boss 免疫 — {'shield': 10, 'hp0': 80, 'hp1': 80}
+[PASS] 雷射：穿透護盾削弱 Boss（8 傷） — {'hp0': 80, 'hp1': 72}
+[PASS] Phase 2：HP ≤ 50% 狂暴、俯衝後力竭 2 秒
+[PASS] 力竭期間受到雙倍傷害（1 傷 → 2） — {'hp0': 32, 'hp1': 30}
+[PASS] Boss 倒下 → 通關並存進度（解鎖無盡） / 擊倒蠅王有人聲「你有病喔」
+[PASS] 通關第 5 關後解鎖無盡模式 / 無盡模式啟動 / 迷你蠅王會出現 / 容錯用完寫入排行
+[PASS] 靜音：音效與人聲都不播
+[PASS] 手機（Pixel 5）：直向版面 + 8 武器列 / 手機觸控拍打計分
 RESULT: PASS
 ```
+
+截圖：`artifacts/fly-v4-mobile.png`、`fly-v4-desktop.png`、`fly-v4-menu.png`（選關卡）、
+`fly-v4-defend.png`（第 3 關）、`fly-v4-boss.png`（第 5 關護盾）
 
 ## 程式結構（都在 `index.html`）
 
 | 區塊 | 內容 |
 | :--- | :--- |
-| 1. 音效 | `Sfx`：Web Audio 即時合成拍擊／電擊／噴霧／雷射／升級／勝敗音，無外部音檔 |
-| 2. 資料 | `WEAPONS`（5 種）、`FLY_TYPES`（家蠅／綠頭蠅／果蠅／子嗣／蠅王）、`LEVELS`（3 關） |
-| 3. 狀態 | `state`：分數、解鎖進度、計時、毒霧、特效、Boss 等 |
-| 4. 蒼蠅 | `Fly` 類別：角度擾動遊走 + 邊界轉向；`rest` 停歇搓腳；`dying` 下墜漸隱；Boss 的閃避／召喚／僵直 |
-| 5. 分數 | `addScore` / `checkUnlock`（門檻自動解鎖並切換） |
-| 6. 攻擊 | `attack`（tap/遠近判定）、`spawnCloud`（毒霧 DoT）、`fireLaser`（橫貫掃射） |
-| 7. 特效 | 粒子、衝擊環、電弧、網格震動、雷射殘影、畫面震動 |
-| 8. 場景 | 三關程序化背景（客廳西瓜／菜市場吊燈／雨夜後巷廚餘桶） |
-| 9–10. 主循環 | `update`（生成／計時／目標判定）、`render`（含螢幕震動） |
-| 11. HUD | 倒數、進度條、分數、武器 chip、Boss 血條、升級 toast、結算彈窗 |
-| 12–14 | 輸入（Pointer Events + capture）、啟動、`window.__game` 測試鉤子 |
+| 1 / 1b | `Sfx`（分層音效＋壓縮器＋靜音）、`Voice`（內嵌 SAPI 人聲） |
+| 2 | `WEAPONS`（8）、`FLY_TYPES`（8 種含蜜蜂/金斑/迷你王）、`LEVELS`（5）、`ENDLESS_CFG` |
+| 3 | `state`：分數、解鎖、陷阱、毒霧、可頌、蜜蜂、突風、Combo、無盡計時 |
+| 4 | `Fly`：遊走／停歇／定身／`targetPos`→`eating`／偽裝透明度／Boss 二階段／俯衝／力竭 |
+| 5 | 分數、解鎖、進度存檔（`localStorage`）、無盡排行 |
+| 6 | `attack()` 七種模式分派 → `tapStrike`（單點/AOE/連鎖/雙持）、`fireSalt`、`placeTrap`、`spawnCloud`、`fireLaser`、`damageFly`（易傷/護盾/階段集中處理） |
+| 7 | 粒子與特效（環、電弧、扇形、文字、閃光） |
+| 8 | 5 種程序化場景（客廳／菜市場／麵包店櫥窗／露營草地／雨夜後巷） |
+| 9 | 蒼蠅繪製（蜜蜂條紋、金斑偽裝、Boss 護盾與 Phase 2 眼紅） |
+| 10 | `update()`：生成、突風、毒霧 tick、陷阱、可頌扣血、護盾環繞、目標判定、無盡節奏 |
+| 11 | HUD（倒數/進度/可頌衛生度/Boss/Combo）、選關卡、結算、無盡排行 |
+| 12–14 | 輸入（Pointer Events）、繪製、啟動與 `window.__game` 測試鉤子 |
 
-測試鉤子（給自動化用，不影響玩法）：`__game.startLevel(n)`、`addScore(n)`、`spawnFly(x,y,type)`、
-`forceSummon()`、`forceStun(t)`、`setTimeLeft(t)`、`attack(x,y)`，以及 `state / flies / boss / clouds / effects / weapon / frame`。
+測試鉤子：`startLevel(n)`、`startEndless()`、`showStart()`、`addScore(n)`、`spawnFly(x,y,type)`、
+`spawnBee()`、`forceSummon()`、`forceDive()`、`forceExhaust(t)`、`forceGust()`、`forcePhase2()`、
+`setTimeLeft(t)`、`attack(x,y)`，以及 `state / flies / boss / defend / traps / clouds / effects / weapon / progress / board / frame / audio / voice`。
 
 ## 發佈到 GitHub Pages
 
 ```powershell
-# token 放在 repo 外（沿用既有設定）
-# %LOCALAPPDATA%\mech-taipei-tunnel\gh-token.txt  ← 一行 PAT
+# token：%LOCALAPPDATA%\mech-taipei-tunnel\gh-token.txt（repo 外，一行 PAT）
 .\publish-pages.ps1 -Owner bodhi16889 -Repo fly-swat-rampage
 .\publish-pages.ps1 -DryRun      # 只看要上傳哪些檔案
 ```
 
-發佈後用同一支測試對公開網址驗一次：
-
-```powershell
-python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
-```
-
 ## 已知限制
 
-- 沒有排行榜／存檔（重新整理即重來）；沒有 Service Worker（離線需自行加）。
-- 音效靠瀏覽器 `AudioContext`，iOS 需先有觸控手勢才會開聲（已綁在第一下 pointerdown）。
-- 命中判定是圓對圓，蒼蠅重疊時以「最近的一隻」為目標（電蚊拍除外，全範圍）。
-- 佈景為程序化繪製（無圖檔），風格偏幾何；要換美術可把 `drawBackground()` 換成貼圖。
+- 沒有 Service Worker（離線需自行加）；沒有雲端排行榜（只有本機 `localStorage` top 5）。
+- 命中判定：單點類取最近一隻；蜜蜂只對「點擊類」武器有懲罰（噴霧／雷射會自動跳過友軍）。
+- 鹽槍扇形以「點擊點 → 畫面中心」定向，點在正中央時預設朝上。
+- 佈景為程序化繪製（無圖檔）；要換美術可把 `drawBackground()` 換成貼圖。

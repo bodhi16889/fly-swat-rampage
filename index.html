@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#14100c" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>打擊蒼蠅大作戰 V3 · Fly Swat Rampage</title>
+<title>打擊蒼蠅大作戰 V4 · Fly Swat Rampage</title>
 <style>
   :root {
     --ink: #f4ede2;
@@ -77,15 +77,39 @@
   /* ---------- weapon bar ---------- */
   #weaponbar {
     position: fixed; left: 0; right: 0; bottom: max(10px, env(safe-area-inset-bottom));
-    display: flex; justify-content: center; gap: 8px; padding: 0 10px; pointer-events: none;
+    display: flex; justify-content: center; align-items: flex-end; flex-wrap: wrap;
+    gap: 4px; row-gap: 4px; padding: 0 6px; pointer-events: none;
   }
+  #combo {
+    position: fixed; left: 50%; top: 26%; transform: translate(-50%, -50%) scale(.9);
+    font: 800 20px/1 system-ui, sans-serif; letter-spacing: .06em;
+    color: #ffd166; text-shadow: 0 0 16px rgba(255, 180, 60, .6);
+    opacity: 0; transition: opacity .15s; pointer-events: none;
+  }
+  #combo.show { opacity: 1; }
+  #bossWrap.defend #bossName { color: #a9f0b0; }
+  #bossWrap.defend #bossBar { background: linear-gradient(90deg, #57c777, #b8f0a0); }
+  #bossWrap.defend #bossTrack { border-color: rgba(140, 220, 150, .5); background: rgba(120, 220, 140, .14); }
+  .levels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 6px; }
+  .levels .lv, .lv.endless {
+    text-align: left; padding: 9px 10px; border-radius: 12px;
+    border: 1px solid rgba(255, 200, 130, .35); background: rgba(255, 190, 110, .08);
+    color: #f0e2cc; font-size: 12px; letter-spacing: 0; display: block; width: 100%;
+  }
+  .levels .lv b { display: block; font-size: 12px; color: #ffe9c9; }
+  .levels .lv span, .lv.endless span { display: block; font-size: 10px; color: #a9947a; margin-top: 2px; }
+  .lv.endless { grid-column: 1 / -1; margin-top: 8px; border-color: rgba(127, 212, 255, .45); background: rgba(90, 170, 220, .1); }
+  .lv.locked { opacity: .45; }
+  .board { margin-top: 12px; text-align: left; font-size: 12px; color: #cbb79c; }
+  .board .bt { font-size: 11px; letter-spacing: .1em; color: #ffd166; margin-bottom: 4px; }
+  .board div { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255, 200, 140, .15); padding: 2px 0; }
   .wbtn {
-    pointer-events: auto; width: 62px; padding: 6px 4px 5px; text-align: center;
+    pointer-events: auto; width: 42px; padding: 5px 2px 4px; text-align: center;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    color: #cbb79c; font-size: 9px; line-height: 1.25; backdrop-filter: blur(4px);
+    color: #cbb79c; font-size: 7.5px; line-height: 1.2; backdrop-filter: blur(4px);
     transition: transform .12s, border-color .12s, color .12s;
   }
-  .wbtn .ico { display: block; font-size: 18px; margin-bottom: 2px; }
+  .wbtn .ico { display: block; font-size: 15px; margin-bottom: 1px; }
   .wbtn.active { border-color: var(--amber); color: #fff4e0; transform: translateY(-3px); box-shadow: 0 0 14px rgba(255, 180, 80, .35); }
   .wbtn.locked { opacity: .42; }
   .wbtn .need { display: block; font-size: 8px; color: #8c7a63; }
@@ -165,6 +189,7 @@
 
 <div id="weaponbar"></div>
 <div id="toast"><span class="big">WEAPON UP</span><span id="toastText">武器升級！</span></div>
+<div id="combo"></div>
 
 <div id="modal">
   <div class="card" id="card"></div>
@@ -193,7 +218,9 @@ const dom = {
   weaponIcon: document.getElementById('weaponIcon'),
   weaponName: document.getElementById('weaponName'),
   bossWrap: document.getElementById('bossWrap'),
+  bossName: document.getElementById('bossName'),
   bossBar: document.getElementById('bossBar'),
+  combo: document.getElementById('combo'),
   weaponbar: document.getElementById('weaponbar'),
   toast: document.getElementById('toast'),
   toastText: document.getElementById('toastText'),
@@ -406,43 +433,68 @@ const Voice = {
 };
 
 /* ==================================================================== *
- * 2. 武器 / 蒼蠅 / 關卡資料
+ * 2. 武器 / 蒼蠅 / 關卡資料（V4：8 把武器 · 5 關 + 無盡模式）
  * ==================================================================== */
 const WEAPONS = [
-  { id: 'newspaper', name: '捲起來的報紙', short: '報紙', icon: '📰', unlock: 0,    radius: 40,  cooldown: 0.35, mode: 'tap',  damage: 1 },
-  { id: 'swatter',   name: '傳統塑膠蒼蠅拍', short: '塑膠拍', icon: '🏓', unlock: 500,  radius: 70,  cooldown: 0.25, mode: 'tap',  damage: 1 },
-  { id: 'electric',  name: '電蚊拍', short: '電蚊拍', icon: '⚡', unlock: 1500, radius: 110, cooldown: 0.20, mode: 'tap',  damage: 1, aoe: true },
-  { id: 'spray',     name: '強效殺蟲噴霧', short: '噴霧', icon: '🧴', unlock: 3500, radius: 160, cooldown: 0.10, mode: 'hold', damage: 1 },
-  { id: 'laser',     name: '終極除蟲雷射炮', short: '雷射', icon: '🔫', unlock: 7000, radius: 0,   cooldown: 1.0,  mode: 'laser', damage: 99 },
+  { id: 'newspaper', name: '捲起來的報紙', short: '報紙', icon: '📰', unlock: 0, radius: 40, cooldown: 0.35, mode: 'tap', damage: 1, branch: 'precise' },
+  { id: 'swatter', name: '傳統塑膠蒼蠅拍', short: '塑膠拍', icon: '🏓', unlock: 400, radius: 70, cooldown: 0.25, mode: 'tap', damage: 1, branch: 'precise' },
+  { id: 'trap', name: '黏蠅紙陷阱板', short: '黏紙', icon: '🪤', unlock: 1000, radius: 120, cooldown: 1.2, mode: 'trap', branch: 'precise', trapTTL: 4, freeze: 2 },
+  { id: 'electric', name: '電蚊拍', short: '電蚊拍', icon: '⚡', unlock: 1800, radius: 100, cooldown: 0.20, mode: 'tap', damage: 1, aoe: true, chain: 2, branch: 'area' },
+  { id: 'salt', name: '散彈鹽狗散彈槍', short: '鹽槍', icon: '🧂', unlock: 3000, radius: 180, cooldown: 0.45, mode: 'fan', branch: 'precise', fanDeg: 60, edgeDamage: 1, centerDamage: 3 },
+  { id: 'spray', name: '強效殺蟲噴霧', short: '噴霧', icon: '🧴', unlock: 4500, radius: 160, cooldown: 0.20, mode: 'hold', branch: 'area', tick: 0.3, tickDamage: 1 },
+  { id: 'twin', name: '雙持高壓電蚊拍', short: '雙拍', icon: '⚡⚡', unlock: 6500, radius: 90, cooldown: 0.15, mode: 'tap', damage: 1, aoe: true, twin: true, branch: 'area' },
+  { id: 'laser', name: '終極除蟲雷射炮', short: '雷射', icon: '🔫', unlock: 9000, radius: 0, cooldown: 0.80, mode: 'laser', band: 40, damage: 99, bossDamage: 8, pierce: true, branch: 'area' },
 ];
 
 const FLY_TYPES = {
-  house:  { r: 11, hp: 1,  speed: 150, points: 20, color: '#4a4a52', label: '家蠅' },
-  bottle: { r: 14, hp: 2,  speed: 105, points: 30, color: '#3f6b46', label: '綠頭大蒼蠅', panic: true },
-  fruit:  { r: 6,  hp: 1,  speed: 250, points: 10, color: '#a8743a', label: '果蠅' },
-  minion: { r: 6,  hp: 1,  speed: 300, points: 5,  color: '#6b3a3a', label: '子嗣' },
-  boss:   { r: 44, hp: 50, speed: 72,  points: 500, color: '#5a2020', label: '腐敗蠅王', boss: true },
+  house:    { r: 11, hp: 1,  speed: 150, points: 20, color: '#4a4a52', label: '家蠅' },
+  bottle:   { r: 14, hp: 2,  speed: 105, points: 30, color: '#3f6b46', label: '綠頭大蒼蠅', panic: true },
+  fruit:    { r: 6,  hp: 1,  speed: 250, points: 10, color: '#a8743a', label: '果蠅' },
+  gold:     { r: 12, hp: 1,  speed: 120, points: 35, color: '#9bb653', label: '金斑麗蠅', camo: true },
+  bee:      { r: 13, hp: 99, speed: 95,  points: 0,  color: '#e8b83a', label: '蜜蜂', friendly: true },
+  minion:   { r: 6,  hp: 1,  speed: 300, points: 5,  color: '#6b3a3a', label: '子嗣' },
+  boss:     { r: 44, hp: 80, speed: 72,  points: 600, color: '#5a2020', label: '腐敗蠅王', boss: true },
+  miniboss: { r: 26, hp: 20, speed: 95,  points: 120, color: '#7a2e2e', label: '迷你蠅王', boss: true, mini: true },
 };
 
 const LEVELS = {
   1: {
     name: '夏日客廳的西瓜切片', time: 40,
-    goal: { type: 'score', target: 600 },
+    goal: { type: 'score', target: 500 },
     targetCount: 10, spawnEvery: 1.05, types: ['house'], watermelon: true,
     tip: '蒼蠅停在西瓜上時擊殺 → 分數雙倍',
   },
   2: {
     name: '熱鬧的傳統菜市場', time: 50,
-    goal: { type: 'kills', target: 40, maxMisses: 10 },
+    goal: { type: 'kills', target: 35, maxMisses: 8 },
     targetCount: 14, spawnEvery: 0.85, types: ['house', 'bottle', 'swarm'],
     tip: '綠頭大蒼蠅要打 2 下；果蠅群適合用電蚊拍一次電掉',
   },
   3: {
-    name: '後巷的廚餘垃圾桶', time: 60,
-    goal: { type: 'boss' },
-    targetCount: 6, spawnEvery: 1.7, types: ['house'], boss: true,
-    tip: '蠅王施放技能後會僵直 1.5 秒 → 此時傷害雙倍',
+    name: '麵包店的櫥窗保衛戰', time: 60,
+    goal: { type: 'defend', target: 100 },
+    targetCount: 8, spawnEvery: 1.25, types: ['house', 'gold'], defend: true, drainPerSec: 5,
+    tip: '蒼蠅停在可頌上會每秒扣 5 點衛生度；金斑麗蠅靜止時幾乎隱形',
   },
+  4: {
+    name: '戶外露營區的野餐墊', time: 60,
+    goal: { type: 'kills', target: 50, maxBeeHits: 2 },
+    targetCount: 12, spawnEvery: 0.8, types: ['house', 'swarm'], bees: true, gustEvery: 15,
+    tip: '蜜蜂是友軍：誤擊扣 200 分並凍結武器 1 秒，超過 2 次就失敗',
+  },
+  5: {
+    name: '後巷廚餘桶的決戰', time: 90,
+    goal: { type: 'boss' },
+    targetCount: 5, spawnEvery: 2.0, types: ['house'], boss: true,
+    tip: 'Phase 1 有護盾（先清子嗣）；Phase 2 俯衝後力竭 2 秒，此時傷害雙倍',
+  },
+};
+
+const ENDLESS_CFG = {
+  name: '無盡狂暴模式', time: Infinity,
+  goal: { type: 'endless' },
+  targetCount: 8, spawnEvery: 0.9, types: ['house', 'bottle', 'swarm'],
+  tip: '容錯 20 次空拍；每 60 秒出迷你蠅王，結束後記錄存活時間與最高 Combo',
 };
 
 /* ==================================================================== *
@@ -451,26 +503,36 @@ const LEVELS = {
 const state = {
   phase: 'menu',              // menu | playing | won | lost
   level: 1,
-  score: 0,                   // 累積分數（決定武器解鎖，跨關卡保留）
-  levelScore: 0,              // 本關分數（第 1 關目標）
+  endless: false,
+  score: 0,
+  levelScore: 0,
   kills: 0,
   misses: 0,
   timeLeft: 0,
-  unlocked: 1,                // 已解鎖武器數量
+  survival: 0,
+  unlocked: 1,
   weaponIndex: 0,
   cool: 0,
   shake: 0,
-  shakeT: 0,
   pointer: { x: -1, y: -1, down: false },
   flies: [],
   clouds: [],
+  traps: [],
   effects: [],
   laser: null,
   boss: null,
+  defend: null,
+  beeHits: 0,
+  wind: null,
+  gustT: 0,
+  weaponLockT: 0,
+  combo: 0,
+  comboT: 0,
+  bestCombo: 0,
   spawnTimer: 0,
+  miniBossT: 0,
   levelConfig: null,
-  hud: { timer: '', score: '', prog: '', weapon: '' },
-  lastResult: null,
+  hud: { timer: '', score: '', prog: '', weapon: '', combo: '' },
 };
 let W = 0, H = 0, DPR = 1;
 let timeAlive = 0;
@@ -487,30 +549,41 @@ class Fly {
     this.hp = T.hp;
     this.maxHp = T.hp;
     this.speed = T.speed * rand(0.85, 1.15);
+    this.baseSpeed = this.speed;
     this.points = T.points;
     this.isBoss = !!T.boss;
+    this.isMiniBoss = !!T.mini;
+    this.friendly = !!T.friendly;
+    this.camo = !!T.camo;
     this.x = opts.x !== undefined ? opts.x : rand(40, W - 40);
-    this.y = opts.y !== undefined ? opts.y : rand(120, H - 120);
+    this.y = opts.y !== undefined ? opts.y : rand(120, H - 140);
     this.angle = rand(0, TAU);
-    this.state = 'fly';           // fly | rest | dying
+    this.state = 'fly';
     this.restT = 0;
-    this.restSpot = null;         // 'watermelon'
+    this.restSpot = null;
     this.flap = rand(0, TAU);
     this.alpha = 1;
-    this.vy = 0;
     this.vx = 0;
+    this.vy = 0;
     this.hpFlash = 0;
     this.panic = false;
     this.panicT = 0;
     this.legPhase = rand(0, TAU);
+    this.spawnT = 0.25;
+    this.dead = false;
+    this.frozenT = 0;
+    this.targetPos = null;
+    this.eating = false;
+    this.shield = false;
     this.dodgeCd = 0;
     this.skillT = 0;
     this.stunT = 0;
-    this.spawnT = 0.25;
-    this.dead = false;
+    this.exhaustT = 0;
+    this.dive = null;
+    this.phase = 1;
+    this.shieldCount = 0;
+    this.phaseAnnounced = false;
   }
-
-  get effectiveR() { return this.r * (this.isBoss ? 1 : 1); }
 
   update(dt, level) {
     this.flap += dt * (this.state === 'rest' ? 6 : 34);
@@ -528,9 +601,32 @@ class Fly {
       return;
     }
 
-    if (this.isBoss) return this.updateBoss(dt);
+    if (this.isBoss) return this.updateBoss(dt, level);
 
-    const speed = this.speed * (this.panic ? 1.75 : 1);
+    // 黏蠅紙定身
+    if (this.frozenT > 0) {
+      this.frozenT -= dt;
+      return;
+    }
+
+    // 第 3 關：朝可頌前進 → 停在上面吃
+    if (this.targetPos && !this.eating) {
+      const dx = this.targetPos.x - this.x;
+      const dy = this.targetPos.y - this.y;
+      const d = Math.hypot(dx, dy) || 1;
+      this.angle = Math.atan2(dy, dx);
+      const sp = this.speed * (this.panic ? 1.6 : 1);
+      this.vx = (dx / d) * sp;
+      this.vy = (dy / d) * sp;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      if (d < this.targetPos.r * 0.55) {
+        this.eating = true;
+        this.state = 'rest';
+      }
+      return;
+    }
+    if (this.eating) return;   // 停在可頌上，扣血由 update() 統一處理
 
     if (this.state === 'rest') {
       this.restT -= dt;
@@ -538,7 +634,6 @@ class Fly {
       return;
     }
 
-    // 平滑隨機遊走：角度持續擾動 + 邊界轉向
     this.angle += rand(-1, 1) * 2.6 * dt;
     const margin = this.r + 10;
     if (this.x < margin) this.angle = lerp(this.angle, 0, 4 * dt);
@@ -546,6 +641,8 @@ class Fly {
     if (this.y < margin + 60) this.angle = lerp(this.angle, Math.PI / 2, 4 * dt);
     if (this.y > H - margin - 60) this.angle = lerp(this.angle, -Math.PI / 2, 4 * dt);
 
+    if (this.panicT > 0) { this.panicT -= dt; if (this.panicT <= 0) this.panic = false; }
+    const speed = this.speed * (this.panic ? 1.75 : 1);
     this.vx = Math.cos(this.angle) * speed;
     this.vy = Math.sin(this.angle) * speed;
     this.x += this.vx * dt;
@@ -556,81 +653,99 @@ class Fly {
     if (this.y < this.r + 52) { this.y = this.r + 52; this.angle = -this.angle; }
     if (this.y > H - this.r - 46) { this.y = H - this.r - 46; this.angle = -this.angle; }
 
-    // 偶爾停下來搓腳（第 1 關會停在西瓜上）
-    if (this.panicT > 0) { this.panicT -= dt; if (this.panicT <= 0) this.panic = false; }
-    const restChance = (level && level.watermelon ? 0.9 : 0.45) * dt;
-    if (Math.random() < restChance) {
-      this.state = 'rest';
-      this.restT = rand(1, 2);
-      if (level && level.watermelon && Math.random() < 0.55) {
-        const spot = watermelonSpot();
-        this.x = spot.x + rand(-1, 1) * spot.r * 0.6;
-        this.y = spot.y + rand(-1, 1) * spot.r * 0.5;
-        this.restSpot = 'watermelon';
+    // 突風（第 4 關）
+    if (state.wind) {
+      this.x += state.wind.dir * state.wind.strength * dt;
+      this.y += Math.sin(timeAlive * 6 + this.flap) * 30 * dt;
+      this.x = clamp(this.x, this.r, W - this.r);
+    }
+
+    if (!this.friendly && !this.targetPos && !this.isBoss) {
+      const restChance = (level && level.watermelon ? 0.9 : 0.45) * dt;
+      if (Math.random() < restChance) {
+        this.state = 'rest';
+        this.restT = rand(1, 2);
+        if (level && level.watermelon && Math.random() < 0.55) {
+          const spot = watermelonSpot();
+          this.x = spot.x + rand(-1, 1) * spot.r * 0.6;
+          this.y = spot.y + rand(-1, 1) * spot.r * 0.5;
+          this.restSpot = 'watermelon';
+        }
       }
     }
   }
 
-  updateBoss(dt) {
-    this.skillT += dt;
-    if (this.stunT > 0) {
-      this.stunT -= dt;
-      if (this.stunT <= 0) this.state = 'fly';
+  updateBoss(dt, level) {
+    this.phase = this.hp > this.maxHp * 0.5 ? 1 : 2;
+
+    // 力竭（俯衝後 2 秒，受到雙倍傷害）
+    if (this.exhaustT > 0) {
+      this.exhaustT -= dt;
+      if (this.exhaustT <= 0) this.state = 'fly';
       return;
     }
-    if (this.skillT >= 10) {
+    if (this.stunT > 0) {
+      this.stunT -= dt;
+      return;
+    }
+    // 俯衝中
+    if (this.dive) {
+      this.dive.t += dt;
+      if (this.dive.t >= this.dive.telegraph) {
+        this.x = lerp(this.x, this.dive.tx, Math.min(1, dt * 9));
+        this.y = lerp(this.y, this.dive.ty, Math.min(1, dt * 9));
+        if (Math.hypot(this.x - this.dive.tx, this.y - this.dive.ty) < 10 || this.dive.t > 2.4) {
+          this.dive = null;
+          this.exhaustT = 2;
+          state.shake = 6;
+          state.effects.push({ type: 'wave', x: this.x, y: this.y, r: 24, ttl: 0.7, t: 0, color: '#ffb08a' });
+        }
+      }
+      return;
+    }
+
+    this.skillT += dt;
+    const speedMul = this.phase === 2 ? 1.5 : 1;
+
+    if (this.phase === 1 && this.skillT >= 10) {
       this.skillT = 0;
       this.castSummon();
       return;
     }
-    // 繞著中央上方緩慢盤旋
+    if (this.phase === 2 && this.skillT >= 7) {
+      this.skillT = 0;
+      this.startDive();
+      return;
+    }
+
     const cx = W / 2, cy = H * 0.33;
-    const a = (timeAlive * (this.speed / 220)) % TAU;
+    const a = (timeAlive * (this.speed / 220) * speedMul) % TAU;
     const tx = cx + Math.cos(a) * Math.min(W * 0.27, 150);
     const ty = cy + Math.sin(a * 1.6) * Math.min(H * 0.11, 90);
-    this.x = lerp(this.x, tx, clamp(dt * 1.6, 0, 1));
-    this.y = lerp(this.y, ty, clamp(dt * 1.6, 0, 1));
+    this.x = lerp(this.x, tx, clamp(dt * 1.6 * speedMul, 0, 1));
+    this.y = lerp(this.y, ty, clamp(dt * 1.6 * speedMul, 0, 1));
     this.angle += dt * 0.6;
   }
 
   castSummon() {
-    const n = randInt(5, 7);
+    const n = this.isMiniBoss ? 3 : 10;
     for (let i = 0; i < n; i++) {
-      const minion = new Fly('minion', { x: this.x + rand(-40, 40), y: this.y + rand(-30, 30) });
-      minion.state = 'fly';
-      state.flies.push(minion);
+      const m = new Fly(this.isMiniBoss ? 'minion' : 'fruit', { x: this.x + rand(-60, 60), y: this.y + rand(-40, 40) });
+      m.state = 'fly';
+      m.shield = !this.isMiniBoss;
+      state.flies.push(m);
     }
-    state.effects.push({ type: 'wave', x: this.x, y: this.y, r: 20, ttl: 0.6, t: 0, color: '#ff7a6a' });
-    this.stunT = 1.5;
-    this.state = 'rest';
+    state.effects.push({ type: 'wave', x: this.x, y: this.y, r: 24, ttl: 0.6, t: 0, color: '#ff7a6a' });
+    this.stunT = 1.2;
+    showToast(this.isMiniBoss ? '迷你蠅王召喚子嗣' : '蒼蠅風暴！護盾生成');
     Sfx.buzz();
   }
 
-  hurt(dmg, hx, hy) {
-    if (this.dead || this.state === 'dying') return false;
-    if (this.isBoss) {
-      if (this.dodgeCd <= 0 && this.stunT <= 0 && Math.random() < 0.25) {
-        this.dodgeCd = 1.1;
-        this.x = rand(W * 0.2, W * 0.8);
-        this.y = rand(H * 0.18, H * 0.5);
-        state.effects.push({ type: 'dodge', x: hx, y: hy, ttl: 0.45, t: 0 });
-        return false;
-      }
-      const mult = this.stunT > 0 ? 2 : 1;
-      this.hp -= dmg * mult;
-      Sfx.hit('heavy');
-      this.hpFlash = 0.16;
-      state.effects.push({ type: 'hit', x: hx, y: hy, ttl: 0.25, t: 0, color: mult > 1 ? '#ffd166' : '#ff9c8a', label: mult > 1 ? 'x2' : '' });
-      if (this.hp <= 0) { this.hp = 0; this.onDeath(); }
-      return true;
-    }
-    this.hp -= dmg;
-    this.hpFlash = 0.14;
-    if (this.hp <= 0) { this.die(); return true; }
-    Sfx.hit(this.T.panic ? 'bottle' : 'fly');
-    if (this.T.panic) { this.panic = true; this.panicT = 2.5; this.angle = rand(0, TAU); }
-    burst(hx, hy, 5, '#c9d6a8', 120);
-    return false;
+  startDive() {
+    this.dive = { t: 0, telegraph: 0.55, tx: rand(W * 0.2, W * 0.8), ty: H * 0.82 };
+    state.effects.push({ type: 'wave', x: this.x, y: this.y, r: 20, ttl: 0.5, t: 0, color: '#ff5a4a' });
+    showToast('音速俯衝！');
+    Sfx.buzz();
   }
 
   die() {
@@ -641,33 +756,64 @@ class Fly {
     const doublePoints = this.restSpot === 'watermelon';
     const gained = this.points * (doublePoints ? 2 : 1);
     addScore(gained);
-    if (state.level === 2) state.kills++;
+    if (!this.friendly) { state.kills++; bumpCombo(); }   // 第 2/4 關的擊殺目標要用
     if (doublePoints) state.effects.push({ type: 'text', x: this.x, y: this.y - 18, ttl: 0.7, t: 0, text: `+${gained}`, color: '#ffe066' });
     Sfx.kill();
     Voice.kill();
   }
 
-  onDeath() {
+  bossDown() {
     this.state = 'dying';
     this.alpha = 1;
-    this.vy = 0;
-    this.vx = 0;
     burst(this.x, this.y, 34, '#8a2b2b', 320);
     state.effects.push({ type: 'wave', x: this.x, y: this.y, r: 30, ttl: 0.9, t: 0, color: '#ffb08a' });
     addScore(this.points);
+    if (this.isMiniBoss) return;          // 迷你王只是加分，不算通關
     state.boss = null;
     Sfx.bossDown();
-    setTimeout(() => Voice.boss(), 320);   // 「你有病喔」在低頻倒塌後才喊
-    winLevel(false);   // 已播 bossDown，不再疊一次關卡勝利音
+    setTimeout(() => Voice.boss(), 320);
+    winLevel(false);
   }
 }
 
 /* ==================================================================== *
- * 5. 分數 / 武器
+ * 5. 分數 / 武器 / 進度
  * ==================================================================== */
+const PROGRESS_KEY = 'fly.swat.progress';
+const BOARD_KEY = 'fly.swat.endless';
+
+function loadProgress() {
+  try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch (e) { return {}; }
+}
+function saveProgress(level) {
+  try {
+    const p = loadProgress();
+    p[level] = true;
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(p));
+  } catch (e) { /* ignore */ }
+}
+function levelUnlocked(n) {
+  if (n <= 1) return true;
+  const p = loadProgress();
+  return !!p[n] || !!p[n - 1];
+}
+function endlessUnlocked() { return !!loadProgress()[5]; }
+
+function loadBoard() {
+  try { return JSON.parse(localStorage.getItem(BOARD_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveBoard(entry) {
+  const board = loadBoard();
+  board.push(entry);
+  board.sort((a, b) => b.survival - a.survival || b.combo - a.combo);
+  const top = board.slice(0, 5);
+  try { localStorage.setItem(BOARD_KEY, JSON.stringify(top)); } catch (e) { /* ignore */ }
+  return top;
+}
+
 function addScore(n) {
-  state.score += n;
-  state.levelScore += n;
+  state.score = Math.max(0, state.score + n);
+  if (n > 0) state.levelScore += n;
   checkUnlock();
 }
 
@@ -696,6 +842,23 @@ function selectWeapon(i) {
   updateWeaponChip();
 }
 
+function bumpCombo() {
+  state.combo++;
+  state.comboT = 1.5;
+  if (state.combo > state.bestCombo) state.bestCombo = state.combo;
+}
+
+function addBeeHit(bee) {
+  state.beeHits++;
+  addScore(-200);
+  state.combo = 0;
+  state.weaponLockT = 1.0;
+  state.effects.push({ type: 'text', x: bee.x, y: bee.y - 20, ttl: 0.9, t: 0, text: '-200 蜜蜂!', color: '#ffd166' });
+  state.effects.push({ type: 'wave', x: bee.x, y: bee.y, r: 18, ttl: 0.5, t: 0, color: '#ffd166' });
+  Sfx.lose();
+  showToast(`誤擊蜜蜂！武器凍結 1 秒（${state.beeHits}/${LEVELS[4].goal.maxBeeHits}）`);
+}
+
 /* ==================================================================== *
  * 6. 攻擊判定
  * ==================================================================== */
@@ -711,48 +874,125 @@ function fliesWithin(x, y, radius) {
 
 function attack(x, y) {
   if (state.phase !== 'playing') return;
+  if (state.weaponLockT > 0) return;              // 誤擊蜜蜂的處罰
   const w = currentWeapon();
   if (state.cool > 0) return;
   state.cool = w.cooldown;
   state.pointer.x = x; state.pointer.y = y;
 
-  if (w.mode === 'laser') { fireLaser(y); return; }
-  if (w.mode === 'hold') { spawnCloud(x, y); return; }
+  switch (w.mode) {
+    case 'laser': fireLaser(y, w); return;
+    case 'hold': spawnCloud(x, y, w); return;
+    case 'trap': placeTrap(x, y, w); return;
+    case 'fan': fireSalt(x, y, w); return;
+    default: tapStrike(x, y, w); return;
+  }
+}
 
-  const hits = fliesWithin(x, y, w.radius);
-  state.effects.push({ type: 'ring', x, y, r: w.radius, ttl: 0.32, t: 0, color: w.id === 'electric' ? '#7fd4ff' : '#ffe6b8' });
+function tapStrike(x, y, w) {
+  Sfx.swing(w.id);
+  state.effects.push({ type: 'ring', x, y, r: w.radius, ttl: 0.32, t: 0, color: w.id === 'electric' || w.id === 'twin' ? '#7fd4ff' : '#ffe6b8' });
 
-  Sfx.swing(w.id);   // 每次出手一聲揮擊（揮空也一樣），命中／擊殺另外疊
-
-  if (w.aoe) {
-    if (hits.length) {
-      for (const f of hits) { f.hurt(w.damage, f.x, f.y); zapTo(x, y, f.x, f.y); }
+  const centers = w.twin ? [{ x: x - 55, y }, { x: x + 55, y }] : [{ x, y }];
+  const hits = [];
+  for (const c of centers) {
+    const local = fliesWithin(c.x, c.y, w.radius);
+    if (w.twin) {
+      state.effects.push({ type: 'ring', x: c.x, y: c.y, r: w.radius, ttl: 0.28, t: 0, color: '#7fd4ff' });
+      state.effects.push({ type: 'zap', x1: c.x, y1: c.y - 40, x2: c.x, y2: c.y + 40, ttl: 0.2, t: 0 });
     }
-  } else if (hits.length) {
-    let target = hits[0];
-    for (const f of hits) if (dist2(x, y, f.x, f.y) < dist2(x, y, target.x, target.y)) target = f;
-    target.hurt(w.damage, x, y);
-  } else {
+    for (const f of local) if (!hits.includes(f)) hits.push(f);
+  }
+
+  if (!hits.length) {
     state.misses++;
     state.effects.push({ type: 'puff', x, y, ttl: 0.3, t: 0 });
+    return;
   }
 
-  if (w.id === 'swatter' && hits.length) {
-    state.effects.push({ type: 'mesh', x, y, ttl: 0.28, t: 0, r: w.radius });
+  if (w.aoe) {
+    for (const f of hits) damageFly(f, w.damage, f.x, f.y);
+    if (w.chain) {
+      const seen = new Set(hits);
+      for (const f of hits) chainLightning(f, seen, w.chain);
+    }
+    Sfx.hit('electric');
+  } else {
+    let target = hits[0];
+    for (const f of hits) if (dist2(x, y, f.x, f.y) < dist2(x, y, target.x, target.y)) target = f;
+    damageFly(target, w.damage, x, y);
   }
+
+  if (w.id === 'swatter' && hits.length) state.effects.push({ type: 'mesh', x, y, ttl: 0.28, t: 0, r: w.radius });
   state.shake = w.id === 'newspaper' ? 4 : 3;
 }
 
-function spawnCloud(x, y) {
-  state.clouds.push({ x, y, r: 8, target: currentWeapon().radius, ttl: 1.7, t: 0, dps: 2.6 });
+function chainLightning(origin, seen, count) {
+  let from = origin;
+  for (let i = 0; i < count; i++) {
+    let best = null, bd = 150 * 150;
+    for (const f of state.flies) {
+      if (f.dead || f.state === 'dying' || f.friendly || seen.has(f)) continue;
+      const d = dist2(from.x, from.y, f.x, f.y);
+      if (d < bd) { bd = d; best = f; }
+    }
+    if (!best) return;
+    seen.add(best);
+    zapTo(from.x, from.y, best.x, best.y);
+    damageFly(best, 1, best.x, best.y);
+    from = best;
+  }
+}
+
+function fireSalt(x, y, w) {
+  Sfx.swing('salt');
+  const mx = x, my = y;                            // 槍口 = 點擊點
+  let ux = W / 2 - mx, uy = H / 2 - my;            // 朝向畫面中心（點在中央時預設往上）
+  if (Math.hypot(ux, uy) < 12) { ux = 0; uy = -1; }
+  const len = Math.hypot(ux, uy) || 1;
+  ux /= len; uy /= len;
+  const half = (w.fanDeg * Math.PI) / 360;         // ±30°
+
+  state.effects.push({ type: 'fan', x: mx, y: my, angle: Math.atan2(uy, ux), spread: half, radius: w.radius, ttl: 0.28, t: 0 });
+
+  let any = false;
+  for (const f of state.flies) {
+    if (f.dead || f.state === 'dying') continue;
+    const dx = f.x - mx, dy = f.y - my;
+    const d = Math.hypot(dx, dy);
+    if (d > w.radius) continue;
+    const ang = Math.acos(clamp((dx * ux + dy * uy) / (d || 1), -1, 1));
+    if (ang > half) continue;
+    any = true;
+    const crit = ang < half / 2.5;                 // 扇心
+    damageFly(f, crit ? w.centerDamage : w.edgeDamage, f.x, f.y, { crit });
+    if (crit) state.effects.push({ type: 'hit', x: f.x, y: f.y, ttl: 0.3, t: 0, color: '#ffd166', label: '暴擊' });
+  }
+  if (!any) state.misses++;
+  state.shake = 5;
+}
+
+function placeTrap(x, y, w) {
+  Sfx.swing('trap');
+  state.traps.push({ x, y, r: w.radius, ttl: w.trapTTL, t: 0, freeze: w.freeze });
+  state.effects.push({ type: 'ring', x, y, r: w.radius, ttl: 0.4, t: 0, color: '#e8e0a0' });
   Sfx.spray();
 }
 
-function fireLaser(y) {
-  const band = 30;
+function spawnCloud(x, y, w) {
+  state.clouds.push({ x, y, r: 10, target: w.radius, ttl: 1.5, t: 0, acc: 0, tick: w.tick, damage: w.tickDamage });
+  Sfx.spray();
+}
+
+function fireLaser(y, w) {
+  const band = w.band;
   const targets = state.flies.filter((f) => !f.dead && f.state !== 'dying' && Math.abs(f.y - y) < band + f.r);
-  for (const f of targets) f.hurt(currentWeapon().damage, f.x, f.y);
-  state.laser = { y, t: 0, ttl: 0.45 };
+  for (const f of targets) {
+    if (f.friendly) continue;                      // 雷射不打蜜蜂
+    if (f.isBoss) damageFly(f, w.bossDamage, f.x, y, { pierce: w.pierce, crit: f.exhaustT > 0 });
+    else damageFly(f, w.damage, f.x, y, { pierce: w.pierce });
+  }
+  state.laser = { y, t: 0, ttl: 0.4, band };
   state.shake = 7;
   Sfx.laser();
 }
@@ -761,8 +1001,47 @@ function zapTo(x1, y1, x2, y2) {
   state.effects.push({ type: 'zap', x1, y1, x2, y2, ttl: 0.22, t: 0 });
 }
 
+/* 統一的傷害入口：蜜蜂／護盾／易傷／Boss 階段都集中在這裡 */
+function damageFly(f, dmg, hx, hy, opts = {}) {
+  if (!f || f.dead || f.state === 'dying') return;
+  if (f.friendly) { addBeeHit(f); return; }
+
+  if (f.isBoss) {
+    if (f.shieldCount > 0 && !opts.pierce) {
+      state.effects.push({ type: 'hit', x: hx, y: hy, ttl: 0.25, t: 0, color: '#7fd4ff', label: '護盾' });
+      Sfx.hit('shield');
+      return;
+    }
+    if (f.dodgeCd <= 0 && f.exhaustT <= 0 && f.phase === 1 && Math.random() < 0.2) {
+      f.dodgeCd = 1.1;
+      f.x = rand(W * 0.2, W * 0.8);
+      f.y = rand(H * 0.18, H * 0.5);
+      state.effects.push({ type: 'dodge', x: hx, y: hy, ttl: 0.45, t: 0 });
+      return;
+    }
+    let d = dmg;
+    if (f.exhaustT > 0) d *= 2;
+    if (opts.crit) d *= 2;
+    f.hp -= d;
+    f.hpFlash = 0.16;
+    state.effects.push({ type: 'hit', x: hx, y: hy, ttl: 0.25, t: 0, color: d >= 4 ? '#ffd166' : '#ff9c8a', label: d >= 4 ? 'x' + Math.round(d) : '' });
+    Sfx.hit('heavy');
+    if (f.hp <= 0) { f.hp = 0; f.bossDown(); }
+    return;
+  }
+
+  let d = dmg;
+  if (f.frozenT > 0) d *= 1.5;                     // 黏蠅紙易傷
+  if (opts.crit) d *= 2;
+  f.hp -= d;
+  f.hpFlash = 0.14;
+  if (f.hp <= 0) { f.die(); return; }
+  Sfx.hit(f.T.panic ? 'bottle' : 'fly');
+  if (f.T.panic) { f.panic = true; f.panicT = 2.5; f.angle = rand(0, TAU); }
+}
+
 /* ==================================================================== *
- * 7. 粒子 / 視覺效果
+ * 7. 粒子 / 特效
  * ==================================================================== */
 function burst(x, y, n, color, speed) {
   for (let i = 0; i < n; i++) {
@@ -783,7 +1062,7 @@ function updateEffects(dt) {
       e.vy += 520 * dt;
       e.x += e.vx * dt; e.y += e.vy * dt;
     } else if (e.type === 'ring' || e.type === 'wave') {
-      e.r += (e.wave === false ? 0 : 240) * dt;
+      e.r += 240 * dt;
     }
     if (e.t >= e.ttl) state.effects.splice(i, 1);
   }
@@ -794,8 +1073,7 @@ function drawEffects() {
     const k = 1 - e.t / e.ttl;
     if (e.type === 'ring') {
       ctx.globalAlpha = k * 0.85;
-      ctx.strokeStyle = e.color;
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = e.color; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, TAU); ctx.stroke();
     } else if (e.type === 'wave') {
       ctx.globalAlpha = k * 0.7;
@@ -814,18 +1092,26 @@ function drawEffects() {
       ctx.strokeStyle = '#e9e2d2'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (0.6 + 0.4 * (1 - k)), 0, TAU); ctx.stroke();
       for (let i = 1; i <= 2; i++) {
-        const rr = (e.r * i) / 3;
-        ctx.beginPath(); ctx.arc(e.x, e.y, rr, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.arc(e.x, e.y, (e.r * i) / 3, 0, TAU); ctx.stroke();
       }
+    } else if (e.type === 'fan') {
+      ctx.globalAlpha = k * 0.5;
+      const g = ctx.createRadialGradient(e.x, e.y, 4, e.x, e.y, e.radius);
+      g.addColorStop(0, 'rgba(255,255,240,.85)');
+      g.addColorStop(1, 'rgba(255,240,200,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(e.x, e.y);
+      ctx.arc(e.x, e.y, e.radius, e.angle - e.spread, e.angle + e.spread);
+      ctx.closePath(); ctx.fill();
     } else if (e.type === 'zap') {
       ctx.globalAlpha = k;
       ctx.strokeStyle = '#9fe6ff'; ctx.lineWidth = 2.5;
       ctx.shadowColor = '#5ad4ff'; ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.moveTo(e.x1, e.y1);
-      const segs = 4;
-      for (let i = 1; i <= segs; i++) {
-        const t = i / segs;
+      for (let i = 1; i <= 4; i++) {
+        const t = i / 4;
         ctx.lineTo(lerp(e.x1, e.x2, t) + rand(-7, 7), lerp(e.y1, e.y2, t) + rand(-7, 7));
       }
       ctx.stroke();
@@ -840,16 +1126,15 @@ function drawEffects() {
       ctx.fillStyle = e.color;
       ctx.beginPath(); ctx.arc(e.x, e.y, 10 * (1 - k) + 4, 0, TAU); ctx.fill();
       if (e.label) {
-        ctx.globalAlpha = k; ctx.fillStyle = '#ffe066'; ctx.font = '700 20px system-ui, sans-serif';
-        ctx.textAlign = 'center'; ctx.fillText(e.label, e.x, e.y - 18 - (1 - k) * 14);
+        ctx.globalAlpha = k; ctx.fillStyle = '#ffe066';
+        ctx.font = '700 16px system-ui, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(e.label, e.x, e.y - 18 - (1 - k) * 14);
       }
     } else if (e.type === 'dodge') {
       ctx.globalAlpha = k * 0.9;
       ctx.strokeStyle = '#ff8f7a'; ctx.lineWidth = 2;
       for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.arc(e.x - i * 12, e.y, 18 + i * 10, 0.2, 2.6);
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(e.x - i * 12, e.y, 18 + i * 10, 0.2, 2.6); ctx.stroke();
       }
     } else if (e.type === 'flash') {
       ctx.globalAlpha = k * 0.35;
@@ -861,7 +1146,7 @@ function drawEffects() {
 }
 
 /* ==================================================================== *
- * 8. 場景繪製
+ * 8. 場景繪製（5 種場景，程序化）
  * ==================================================================== */
 function roundRectPath(x, y, w, h, r) {
   ctx.beginPath();
@@ -879,24 +1164,25 @@ function watermelonSpot() {
   return { x: W / 2, y: H * 0.6, r: Math.min(W, H) * 0.2 };
 }
 
+function defendTarget() {
+  return { x: W / 2, y: H * 0.62, r: Math.min(W, H) * 0.15 };
+}
+
 function drawBackground() {
   const n = state.level;
   if (n === 1) {
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, '#4a2f1d'); g.addColorStop(0.55, '#6b4426'); g.addColorStop(1, '#3a2415');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    // 茶几
     ctx.fillStyle = '#8a5a30';
     ctx.beginPath(); ctx.ellipse(W / 2, H * 0.72, W * 0.62, H * 0.24, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = 'rgba(255, 220, 160, .12)';
     ctx.beginPath(); ctx.ellipse(W / 2, H * 0.7, W * 0.58, H * 0.21, 0, 0, TAU); ctx.fill();
-    // 盤子 + 西瓜
     const s = watermelonSpot();
     ctx.fillStyle = '#efe7dc';
     ctx.beginPath(); ctx.ellipse(s.x, s.y + s.r * 0.22, s.r * 1.35, s.r * 0.62, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = '#f0f0ea';
     ctx.beginPath(); ctx.ellipse(s.x, s.y + s.r * 0.16, s.r * 1.28, s.r * 0.56, 0, 0, TAU); ctx.fill();
-    // 切片
     ctx.save();
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r, Math.PI, TAU); ctx.closePath(); ctx.clip();
     ctx.fillStyle = '#2f7d3a'; ctx.fillRect(s.x - s.r, s.y - s.r, s.r * 2, s.r);
@@ -911,23 +1197,17 @@ function drawBackground() {
       ctx.ellipse(s.x + Math.cos(a) * rr, s.y + Math.sin(a) * rr, 2.4, 3.6, a, 0, TAU);
       ctx.fill();
     }
-    // 夏日窗光（柔和漸層，避免變成一個灰圓）
     const sun = ctx.createRadialGradient(W * 0.8, H * 0.14, 4, W * 0.8, H * 0.14, Math.min(W, H) * 0.42);
     sun.addColorStop(0, 'rgba(255, 240, 200, .16)');
     sun.addColorStop(0.5, 'rgba(255, 230, 170, .06)');
     sun.addColorStop(1, 'rgba(255, 220, 160, 0)');
-    ctx.fillStyle = sun;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = sun; ctx.fillRect(0, 0, W, H);
   } else if (n === 2) {
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, '#241a12'); g.addColorStop(0.6, '#3a2a1c'); g.addColorStop(1, '#171008');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    // 攤位檯面
-    ctx.fillStyle = '#4a3524';
-    ctx.fillRect(0, H * 0.62, W, H * 0.1);
-    ctx.fillStyle = '#5d4230';
-    ctx.fillRect(0, H * 0.72, W, H * 0.28);
-    // 吊燈
+    ctx.fillStyle = '#4a3524'; ctx.fillRect(0, H * 0.62, W, H * 0.1);
+    ctx.fillStyle = '#5d4230'; ctx.fillRect(0, H * 0.72, W, H * 0.28);
     for (let i = 0; i < 3; i++) {
       const bx = W * (0.22 + i * 0.28) + Math.sin(timeAlive * 1.4 + i) * 10;
       const by = H * (0.16 + (i % 2) * 0.05);
@@ -937,20 +1217,86 @@ function drawBackground() {
       lg.addColorStop(0, 'rgba(255, 206, 120, .55)');
       lg.addColorStop(0.4, 'rgba(255, 180, 90, .16)');
       lg.addColorStop(1, 'rgba(255, 170, 80, 0)');
-      ctx.fillStyle = lg;
-      ctx.beginPath(); ctx.arc(bx, by, 110, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#ffd98a';
-      ctx.beginPath(); ctx.arc(bx, by, 7, 0, TAU); ctx.fill();
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(bx, by, 110, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#ffd98a'; ctx.beginPath(); ctx.arc(bx, by, 7, 0, TAU); ctx.fill();
     }
-    // 肉/魚攤位方塊
     ctx.fillStyle = 'rgba(120, 60, 55, .55)'; ctx.fillRect(W * 0.06, H * 0.5, W * 0.24, H * 0.12);
     ctx.fillStyle = 'rgba(80, 110, 130, .45)'; ctx.fillRect(W * 0.68, H * 0.52, W * 0.26, H * 0.1);
     ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(0, 0, W, H * 0.06);
+  } else if (n === 3) {
+    // 麵包店櫥窗
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#6d5340'); g.addColorStop(0.55, '#a98a68'); g.addColorStop(1, '#4d3a2b');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // 玻璃展示櫃
+    ctx.fillStyle = 'rgba(220, 240, 255, .10)';
+    ctx.fillRect(W * 0.08, H * 0.34, W * 0.84, H * 0.5);
+    ctx.strokeStyle = 'rgba(255, 255, 255, .38)'; ctx.lineWidth = 3;
+    ctx.strokeRect(W * 0.08, H * 0.34, W * 0.84, H * 0.5);
+    ctx.strokeStyle = 'rgba(255, 255, 255, .16)';
+    ctx.beginPath(); ctx.moveTo(W * 0.2, H * 0.34); ctx.lineTo(W * 0.08, H * 0.6); ctx.stroke();
+    // 木層板
+    ctx.fillStyle = '#6b4a30';
+    ctx.fillRect(W * 0.08, H * 0.78, W * 0.84, H * 0.06);
+    ctx.fillRect(W * 0.08, H * 0.55, W * 0.84, H * 0.02);
+    // 麵包們
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = '#d9a35e';
+      ctx.beginPath();
+      ctx.ellipse(W * (0.22 + i * 0.28), H * 0.545, W * 0.06, H * 0.022, 0, 0, TAU);
+      ctx.fill();
+    }
+    // 中央草莓可頌
+    const t = defendTarget();
+    ctx.fillStyle = '#c9813c';
+    ctx.beginPath(); ctx.ellipse(t.x, t.y, t.r * 1.15, t.r * 0.66, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#e0a256';
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.ellipse(t.x + i * t.r * 0.38, t.y - t.r * 0.06, t.r * 0.22, t.r * 0.5, 0, 0, TAU);
+      ctx.fill();
+    }
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = '#d63b4a';
+      ctx.beginPath();
+      ctx.arc(t.x + Math.cos(i * 1.6) * t.r * 0.45, t.y - t.r * 0.25 + Math.sin(i * 2.1) * t.r * 0.18, t.r * 0.16, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255, 240, 200, .5)';
+    ctx.font = `${Math.round(W * 0.03)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('FRESH BAKERY', W / 2, H * 0.31);
+  } else if (n === 4) {
+    // 露營野餐墊
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.5);
+    sky.addColorStop(0, '#8fc7ea'); sky.addColorStop(1, '#d8ecc8');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H * 0.5);
+    ctx.fillStyle = '#5d8f4a'; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+    for (let i = 0; i < 60; i++) {
+      const gx = (i * 83) % W;
+      const gy = H * 0.52 + ((i * 47) % Math.floor(H * 0.46));
+      ctx.strokeStyle = 'rgba(40, 80, 35, .35)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + 3, gy - 9); ctx.stroke();
+    }
+    // 野餐墊（格紋）
+    const mx = W * 0.5, my = H * 0.66, mw = W * 0.74, mh = H * 0.26;
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(mx, my, mw / 2, mh / 2, 0, 0, TAU); ctx.clip();
+    ctx.fillStyle = '#f2e6d0'; ctx.fillRect(mx - mw / 2, my - mh / 2, mw, mh);
+    ctx.fillStyle = 'rgba(214, 76, 76, .55)';
+    for (let i = -6; i < 6; i++) ctx.fillRect(mx - mw / 2 + i * 46, my - mh / 2, 23, mh);
+    for (let i = -6; i < 6; i++) ctx.fillRect(mx - mw / 2, my - mh / 2 + i * 46, mw, 23);
+    ctx.restore();
+    // 樹
+    ctx.fillStyle = '#3c6b33';
+    ctx.beginPath(); ctx.arc(W * 0.12, H * 0.44, W * 0.1, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#4a7d3d';
+    ctx.beginPath(); ctx.arc(W * 0.88, H * 0.42, W * 0.12, 0, TAU); ctx.fill();
   } else {
+    // 後巷（第 5 關 / 無盡）
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, '#0b1013'); g.addColorStop(0.5, '#131a1c'); g.addColorStop(1, '#080b0c');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    // 磚牆
     ctx.strokeStyle = 'rgba(255,255,255,.045)'; ctx.lineWidth = 1;
     for (let y = 0; y < H * 0.75; y += 34) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
@@ -958,7 +1304,6 @@ function drawBackground() {
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 34); ctx.stroke();
       }
     }
-    // 倒翻的廚餘桶
     ctx.save();
     ctx.translate(W * 0.5, H * 0.74);
     ctx.rotate(-0.28);
@@ -967,7 +1312,6 @@ function drawBackground() {
     ctx.fillStyle = '#3d5c43';
     roundRectPath(-W * 0.23, -H * 0.13, W * 0.46, H * 0.05, 10); ctx.fill();
     ctx.restore();
-    // 污水 + 雨
     ctx.fillStyle = 'rgba(70, 110, 60, .18)';
     ctx.beginPath(); ctx.ellipse(W * 0.5, H * 0.86, W * 0.46, H * 0.07, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = 'rgba(150, 190, 220, .18)'; ctx.lineWidth = 1.4;
@@ -977,6 +1321,19 @@ function drawBackground() {
       ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 5, ry + 18); ctx.stroke();
     }
   }
+  // 突風視覺
+  if (state.wind) {
+    ctx.strokeStyle = 'rgba(200, 230, 255, .22)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 12; i++) {
+      const y = (i / 12) * H;
+      const off = (timeAlive * 900 * state.wind.dir) % 120;
+      ctx.beginPath();
+      ctx.moveTo(((off + i * 40) % (W + 120)) - 60, y);
+      ctx.lineTo(((off + i * 40) % (W + 120)) - 60 + 70 * state.wind.dir, y - 8);
+      ctx.stroke();
+    }
+  }
 }
 
 /* ==================================================================== *
@@ -984,7 +1341,11 @@ function drawBackground() {
  * ==================================================================== */
 function drawFly(f) {
   ctx.save();
-  ctx.globalAlpha = clamp(f.alpha, 0, 1);
+  const moving = f.state === 'fly' || (f.isBoss && (f.dive || f.stunT > 0));
+  let alpha = clamp(f.alpha, 0, 1);
+  if (f.camo && !moving && !f.eating) alpha *= 0.2;          // 金斑麗蠅：靜止近乎隱形
+  if (f.frozenT > 0) alpha *= 0.85;
+  ctx.globalAlpha = alpha;
   ctx.translate(f.x, f.y);
   const r = f.r;
   if (f.spawnT > 0) {
@@ -993,13 +1354,13 @@ function drawFly(f) {
   }
 
   const boss = f.isBoss;
-  const bodyColor = f.hpFlash > 0 ? '#ffffff' : (boss ? '#5a2020' : f.T.color);
+  const phase2 = boss && f.phase === 2;
+  const bodyColor = f.hpFlash > 0 ? '#ffffff' : (boss ? (phase2 ? '#7a1f1f' : '#5a2020') : f.T.color);
 
-  // 影子
-  ctx.globalAlpha *= 0.28;
+  ctx.globalAlpha = alpha * 0.28;
   ctx.fillStyle = '#000';
   ctx.beginPath(); ctx.ellipse(0, r * 1.5, r * 0.9, r * 0.3, 0, 0, TAU); ctx.fill();
-  ctx.globalAlpha = clamp(f.alpha, 0, 1);
+  ctx.globalAlpha = alpha;
 
   // 翅膀
   const flapK = f.state === 'rest' ? 0.15 : Math.abs(Math.sin(f.flap)) * 0.85 + 0.15;
@@ -1015,23 +1376,35 @@ function drawFly(f) {
 
   // 身體
   const bg = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.15, 0, 0, r * 1.15);
-  bg.addColorStop(0, boss ? '#a03a3a' : '#7c7c86');
+  bg.addColorStop(0, boss ? (phase2 ? '#c05252' : '#a03a3a') : (f.friendly ? '#ffd35c' : '#7c7c86'));
   bg.addColorStop(1, bodyColor);
   ctx.fillStyle = bg;
   ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.86, 0, 0, TAU); ctx.fill();
 
+  // 蜜蜂條紋
+  if (f.friendly) {
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.86, 0, 0, TAU); ctx.clip();
+    ctx.fillStyle = 'rgba(40, 30, 20, .85)';
+    for (let i = -2; i <= 2; i++) ctx.fillRect(i * r * 0.45, -r, r * 0.2, r * 2);
+    ctx.restore();
+    ctx.fillStyle = '#ffd35c';
+    ctx.font = `700 ${Math.round(r * 1.1)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText('♡', 0, -r * 0.9);
+  }
+
   // 頭 + 眼睛
   const headR = r * 0.55;
-  ctx.fillStyle = boss ? '#3d1414' : '#2b2b30';
+  ctx.fillStyle = boss ? '#3d1414' : (f.friendly ? '#3b2c12' : '#2b2b30');
   ctx.beginPath(); ctx.arc(0, -r * 0.62, headR, 0, TAU); ctx.fill();
-  const eyeC = boss ? '#ff4a4a' : '#d94f4f';
-  ctx.fillStyle = eyeC;
+  ctx.fillStyle = phase2 ? '#ff3030' : (boss ? '#ff4a4a' : '#d94f4f');
   const eyeOff = headR * 0.62;
   for (const side of [-1, 1]) {
-    ctx.beginPath(); ctx.arc(side * eyeOff, -r * 0.74, headR * 0.5, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(side * eyeOff, -r * 0.74, headR * (phase2 ? 0.58 : 0.5), 0, TAU); ctx.fill();
   }
   if (boss) {
-    ctx.fillStyle = '#ffd166';
+    ctx.fillStyle = phase2 ? '#ff8a5c' : '#ffd166';
     ctx.beginPath();
     ctx.moveTo(-r * 0.5, -r * 1.12);
     ctx.lineTo(-r * 0.2, -r * 1.5);
@@ -1039,8 +1412,12 @@ function drawFly(f) {
     ctx.lineTo(r * 0.2, -r * 1.5);
     ctx.lineTo(r * 0.5, -r * 1.12);
     ctx.closePath(); ctx.fill();
+    if (f.shieldCount > 0) {
+      ctx.strokeStyle = 'rgba(127, 212, 255, .75)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, r * 1.35, 0, TAU); ctx.stroke();
+    }
   }
-  // 腳（停歇時搓腳）
+  // 腳
   ctx.strokeStyle = 'rgba(20,20,24,.8)';
   ctx.lineWidth = Math.max(1.2, r * 0.11);
   const jitter = f.state === 'rest' ? Math.sin(f.legPhase) * r * 0.22 : 0;
@@ -1052,13 +1429,20 @@ function drawFly(f) {
     ctx.stroke();
   }
 
-  // 血條（2 血以上或 Boss 以外的多血怪）
-  if (!boss && f.maxHp > 1 && f.hp > 0) {
-    ctx.globalAlpha = 0.9;
+  // 血條
+  if (!boss && f.maxHp > 1 && f.hp > 0 && !f.friendly) {
     ctx.fillStyle = 'rgba(0,0,0,.55)';
     ctx.fillRect(-r, -r * 1.9, r * 2, 4);
     ctx.fillStyle = '#7fe0a0';
     ctx.fillRect(-r, -r * 1.9, r * 2 * (f.hp / f.maxHp), 4);
+  }
+  // 定身提示
+  if (f.frozenT > 0) {
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#ffe066';
+    ctx.font = `700 ${Math.round(r * 0.9)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText('✳', 0, -r * 1.7);
   }
   ctx.restore();
 }
@@ -1077,33 +1461,69 @@ function resize() {
 
 function startLevel(n, resetRun = false) {
   if (resetRun) { state.score = 0; state.unlocked = 1; state.weaponIndex = 0; }
+  state.endless = false;
   state.level = n;
   state.phase = 'playing';
   state.levelConfig = LEVELS[n];
-  state.levelScore = 0;
-  state.kills = 0;
-  state.misses = 0;
-  state.timeLeft = state.levelConfig.time;
-  state.cool = 0;
-  state.flies = [];
-  state.clouds = [];
-  state.effects = [];
-  state.laser = null;
-  state.boss = null;
-  state.spawnTimer = 0;
-  state.lastResult = null;
-  dom.modal.classList.add('hidden');
-  dom.bossWrap.classList.toggle('on', !!state.levelConfig.boss);
-
+  resetRound();
   if (state.levelConfig.boss) {
     const boss = new Fly('boss', { x: W / 2, y: H * 0.33 });
     state.boss = boss;
     state.flies.push(boss);
   }
+  if (state.levelConfig.defend) {
+    const t = defendTarget();
+    state.defend = { x: t.x, y: t.y, r: t.r, hp: 100, maxHp: 100 };
+  }
+  if (state.levelConfig.bees) spawnBee();
   for (let i = 0; i < Math.floor(state.levelConfig.targetCount * 0.7); i++) spawnFly();
+  state.gustT = state.levelConfig.gustEvery || 0;
   renderWeaponBar();
   updateWeaponChip();
   updateHud(true);
+}
+
+function startEndless() {
+  state.endless = true;
+  state.level = 0;
+  state.phase = 'playing';
+  state.levelConfig = ENDLESS_CFG;
+  resetRound();
+  state.defend = null;
+  state.miniBossT = 60;
+  for (let i = 0; i < 6; i++) spawnFly();
+  renderWeaponBar();
+  updateWeaponChip();
+  dom.levelName.textContent = '無盡狂暴模式 · ENDLESS';
+  updateHud(true);
+}
+
+function resetRound() {
+  state.levelScore = 0;
+  state.kills = 0;
+  state.misses = 0;
+  state.survival = 0;
+  state.beeHits = 0;
+  state.combo = 0;
+  state.bestCombo = 0;
+  state.comboT = 0;
+  state.weaponLockT = 0;
+  state.timeLeft = state.levelConfig.time;
+  state.cool = 0;
+  state.flies = [];
+  state.clouds = [];
+  state.traps = [];
+  state.effects = [];
+  state.laser = null;
+  state.boss = null;
+  state.defend = null;
+  state.wind = null;
+  state.gustT = 0;
+  state.spawnTimer = 0;
+  state.lastResult = null;
+  dom.modal.classList.add('hidden');
+  dom.bossWrap.classList.remove('on', 'defend');
+  dom.combo.classList.remove('show');
 }
 
 function spawnFly(typeHint) {
@@ -1115,14 +1535,28 @@ function spawnFly(typeHint) {
     if (type === 'swarm') {
       const n = randInt(5, 8);
       const cx = rand(W * 0.2, W * 0.8), cy = rand(H * 0.25, H * 0.7);
+      const dir = Math.random() < 0.5 ? 1 : -1;
       let last = null;
       for (let i = 0; i < n; i++) {
-        last = pushFly(new Fly('fruit', { x: cx + rand(-20, 20), y: cy + rand(-20, 20) }));
+        const f = new Fly('fruit', { x: cx + rand(-20, 20), y: cy + rand(-20, 20) });
+        f.angle = dir > 0 ? 0 : Math.PI;            // 整團直線穿過
+        last = pushFly(f);
       }
       return last;
     }
   }
-  return pushFly(new Fly(type));
+  const f = new Fly(type);
+  if (state.levelConfig.defend && !f.friendly) {
+    const t = defendTarget();
+    f.targetPos = { x: t.x, y: t.y, r: t.r };
+  }
+  return pushFly(f);
+}
+
+function spawnBee() {
+  const f = new Fly('bee', { x: rand(60, W - 60), y: rand(H * 0.25, H * 0.55) });
+  f.speed = 95;
+  return pushFly(f);
 }
 
 function pushFly(fly) {
@@ -1132,7 +1566,7 @@ function pushFly(fly) {
 }
 
 function pickWeighted(types) {
-  const table = { house: 0.45, bottle: 0.3, swarm: 0.25, fruit: 0.4, minion: 0.5, boss: 0 };
+  const table = { house: 0.45, bottle: 0.3, swarm: 0.25, fruit: 0.4, gold: 0.3, minion: 0.5, bee: 0.1 };
   const pool = [];
   for (const t of types) for (let i = 0; i < Math.max(1, Math.round((table[t] || 0.3) * 10)); i++) pool.push(t);
   return pool[Math.floor(Math.random() * pool.length)];
@@ -1144,46 +1578,114 @@ function update(dt) {
   updateEffects(dt);
   if (state.phase !== 'playing') return;
 
-  state.timeLeft -= dt;
+  if (state.weaponLockT > 0) state.weaponLockT -= dt;
+  if (state.comboT > 0) { state.comboT -= dt; if (state.comboT <= 0) state.combo = 0; }
   if (state.cool > 0) state.cool -= dt;
-  const cfg = state.levelConfig;
 
-  // 生成蒼蠅
-  state.spawnTimer -= dt;
-  const alive = state.flies.filter((f) => f.state !== 'dying').length;
-  if (state.spawnTimer <= 0 && alive < cfg.targetCount) {
-    state.spawnTimer = cfg.spawnEvery * rand(0.7, 1.25);
-    spawnFly();
+  const cfg = state.levelConfig;
+  if (state.endless) state.survival += dt; else state.timeLeft -= dt;
+
+  // 突風
+  if (cfg.gustEvery) {
+    if (state.wind) {
+      state.wind.t -= dt;
+      if (state.wind.t <= 0) state.wind = null;
+    } else {
+      state.gustT -= dt;
+      if (state.gustT <= 0) {
+        state.gustT = cfg.gustEvery;
+        state.wind = { dir: Math.random() < 0.5 ? -1 : 1, t: 1.3, strength: 260 };
+        showToast('突風颳起！');
+        Sfx.spray();
+      }
+    }
   }
 
-  // 蒼蠅更新
+  // 生成
+  state.spawnTimer -= dt;
+  const alive = state.flies.filter((f) => f.state !== 'dying').length;
+  let every = cfg.spawnEvery;
+  let cap = cfg.targetCount;
+  if (state.endless) {
+    every = Math.max(0.32, 0.9 - state.survival * 0.008);
+    cap = Math.min(26, 8 + Math.floor(state.survival * 0.15));
+  }
+  if (state.spawnTimer <= 0 && alive < cap) {
+    state.spawnTimer = every * rand(0.7, 1.25);
+    spawnFly();
+  }
+  if (cfg.bees && state.flies.filter((f) => f.friendly).length < 2 && Math.random() < dt * 0.15) spawnBee();
+  if (state.endless) {
+    state.miniBossT -= dt;
+    if (state.miniBossT <= 0) {
+      state.miniBossT = 60;
+      const mb = new Fly('miniboss', { x: W / 2, y: H * 0.28 });
+      pushFly(mb);
+      showToast('迷你蠅王出現！');
+    }
+  }
+
+  // 蒼蠅
   for (const f of state.flies) f.update(dt, cfg);
   state.flies = state.flies.filter((f) => !f.dead);
 
-  // 噴霧毒霧
+  // 護盾子嗣環繞 Boss
+  if (state.boss) {
+    state.boss.shieldCount = state.flies.filter((f) => f.shield && !f.dead && f.state !== 'dying').length;
+    if (state.boss.phase === 2 && !state.boss.phaseAnnounced) {
+      state.boss.phaseAnnounced = true;
+      showToast('蠅王狂暴！速度 ×1.5');
+      state.shake = 8;
+      Sfx.buzz();
+    }
+  }
+  // 環繞
+  const shields = state.flies.filter((f) => f.shield && !f.dead && f.state !== 'dying');
+  if (state.boss && shields.length) {
+    shields.forEach((f, i) => {
+      const a = timeAlive * 0.9 + (i / shields.length) * TAU;
+      f.x = state.boss.x + Math.cos(a) * (state.boss.r * 1.7);
+      f.y = state.boss.y + Math.sin(a) * (state.boss.r * 1.7);
+      f.angle = a + Math.PI / 2;
+    });
+  }
+
+  // 可頌被吃 → 扣衛生度
+  if (state.defend && state.boss === null) {
+    const eaters = state.flies.filter((f) => f.eating && !f.dead && f.state !== 'dying').length;
+    if (eaters > 0) state.defend.hp = Math.max(0, state.defend.hp - LEVELS[3].drainPerSec * eaters * dt);
+    if (state.defend.hp <= 0) return loseLevel('可頌被吃光了');
+  }
+
+  // 噴霧毒霧（每 0.3 秒結算一次）
   if (state.pointer.down && currentWeapon().mode === 'hold' && state.cool <= 0) {
     state.cool = currentWeapon().cooldown;
-    spawnCloud(state.pointer.x, state.pointer.y);
+    spawnCloud(state.pointer.x, state.pointer.y, currentWeapon());
   }
   for (let i = state.clouds.length - 1; i >= 0; i--) {
     const c = state.clouds[i];
     c.t += dt;
     c.r = lerp(c.r, c.target, clamp(dt * 8, 0, 1));
-    for (const f of state.flies) {
-      if (f.dead || f.state === 'dying') continue;
-      if (dist2(c.x, c.y, f.x, f.y) <= (c.r + f.r) ** 2) {
-        if (f.isBoss) {
-          f.hp -= c.dps * dt;
-          f.hpFlash = 0.08;
-          if (f.hp <= 0) { f.hp = 0; f.onDeath(); }
-        } else {
-          f.hp -= c.dps * dt;
-          f.hpFlash = 0.08;
-          if (f.hp <= 0) f.die();
-        }
+    c.acc += dt;
+    if (c.acc >= c.tick) {
+      c.acc -= c.tick;
+      for (const f of state.flies) {
+        if (f.dead || f.state === 'dying' || f.friendly) continue;
+        if (dist2(c.x, c.y, f.x, f.y) <= (c.r + f.r) ** 2) damageFly(f, c.damage, f.x, f.y);
       }
     }
     if (c.t >= c.ttl) state.clouds.splice(i, 1);
+  }
+
+  // 黏蠅紙
+  for (let i = state.traps.length - 1; i >= 0; i--) {
+    const t = state.traps[i];
+    t.t += dt;
+    for (const f of state.flies) {
+      if (f.dead || f.state === 'dying' || f.friendly || f.isBoss) continue;
+      if (dist2(t.x, t.y, f.x, f.y) <= (t.r * 0.8) ** 2) f.frozenT = Math.max(f.frozenT, t.freeze);
+    }
+    if (t.t >= t.ttl) state.traps.splice(i, 1);
   }
 
   if (state.laser) {
@@ -1191,20 +1693,20 @@ function update(dt) {
     if (state.laser.t >= state.laser.ttl) state.laser = null;
   }
 
-  // 目標判定
-  checkGoal();
+  if (!state.endless) checkGoal();
+  else if (state.misses > 20) finishEndless();
   updateHud();
 }
 
 function checkGoal() {
   if (state.phase !== 'playing') return;
   const cfg = state.levelConfig;
-  if (cfg.goal.maxMisses !== undefined && state.misses > cfg.goal.maxMisses) {
-    return loseLevel('空拍次數過多');
-  }
+  if (cfg.goal.maxMisses !== undefined && state.misses > cfg.goal.maxMisses) return loseLevel('空拍次數過多');
+  if (cfg.goal.maxBeeHits !== undefined && state.beeHits > cfg.goal.maxBeeHits) return loseLevel('誤擊蜜蜂太多次');
   if (cfg.goal.type === 'score' && state.levelScore >= cfg.goal.target) return winLevel();
   if (cfg.goal.type === 'kills' && state.kills >= cfg.goal.target) return winLevel();
   if (cfg.goal.type === 'boss' && !state.boss) return winLevel();
+  if (cfg.goal.type === 'defend' && state.timeLeft <= 0 && state.defend.hp > 0) return winLevel();
   if (state.timeLeft <= 0) {
     state.timeLeft = 0;
     return loseLevel('時間到');
@@ -1212,9 +1714,10 @@ function checkGoal() {
 }
 
 function winLevel(playSound = true) {
-  if (state.phase !== 'playing') return;
+  if (state.phase !== 'playing' || state.endless) return;
   state.phase = 'won';
   if (playSound) Sfx.win();
+  saveProgress(state.level);
   showResult(true);
 }
 
@@ -1225,16 +1728,24 @@ function loseLevel(reason) {
   showResult(false, reason);
 }
 
+function finishEndless() {
+  if (state.phase !== 'playing') return;
+  state.phase = 'lost';
+  Sfx.lose();
+  const board = saveBoard({ survival: Math.round(state.survival), combo: state.bestCombo, at: Date.now() });
+  showResult(false, `容錯用完（${state.misses} 次空拍）`, board);
+}
+
 /* ==================================================================== *
  * 11. HUD / 彈窗
  * ==================================================================== */
 function updateHud(force = false) {
   const cfg = state.levelConfig;
   if (!cfg) return;
-  const t = Math.max(0, state.timeLeft).toFixed(1);
+  const t = state.endless ? state.survival.toFixed(1) : Math.max(0, state.timeLeft).toFixed(1);
   if (force || t !== state.hud.timer) {
     dom.timer.textContent = t;
-    dom.timer.classList.toggle('low', state.timeLeft <= 10 && state.phase === 'playing');
+    dom.timer.classList.toggle('low', !state.endless && state.timeLeft <= 10 && state.phase === 'playing');
     state.hud.timer = t;
   }
   const scoreTxt = String(state.score);
@@ -1248,19 +1759,39 @@ function updateHud(force = false) {
     label = `${state.levelScore} / ${cfg.goal.target} 分`;
   } else if (cfg.goal.type === 'kills') {
     prog = clamp(state.kills / cfg.goal.target, 0, 1);
-    label = `${state.kills} / ${cfg.goal.target} 隻 · 空拍 ${state.misses}/${cfg.goal.maxMisses}`;
-  } else {
-    const hp = state.boss ? state.boss.hp : 0;
+    label = `${state.kills} / ${cfg.goal.target} 隻` +
+      (cfg.goal.maxMisses !== undefined ? ` · 空拍 ${state.misses}/${cfg.goal.maxMisses}` : '') +
+      (cfg.goal.maxBeeHits !== undefined ? ` · 蜜蜂 ${state.beeHits}/${cfg.goal.maxBeeHits}` : '');
+  } else if (cfg.goal.type === 'defend') {
+    const hp = state.defend ? Math.ceil(state.defend.hp) : 0;
+    prog = state.defend ? 1 - state.defend.hp / state.defend.maxHp : 0;
+    label = `衛生度 ${hp} / 100`;
+    dom.bossWrap.classList.add('on', 'defend');
+    dom.bossName.textContent = '草莓可頌 · 衛生度';
+    dom.bossBar.style.width = `${hp}%`;
+  } else if (cfg.goal.type === 'boss') {
+    const b = state.flies.find((f) => f.isBoss && !f.isMiniBoss);
+    const hp = b ? b.hp : 0;
     prog = 1 - hp / FLY_TYPES.boss.hp;
-    label = state.boss ? `蠅王 ${Math.ceil(hp)} / ${FLY_TYPES.boss.hp}` : '蠅王已倒下';
-    if (state.boss) dom.bossBar.style.width = `${clamp(100 - prog * 100, 0, 100)}%`;
+    label = b ? `蠅王 ${Math.ceil(hp)} / ${FLY_TYPES.boss.hp}${b.shieldCount > 0 ? ' · 護盾中' : ''}` : '蠅王已倒下';
+    dom.bossWrap.classList.add('on');
+    dom.bossBar.style.width = `${clamp((hp / FLY_TYPES.boss.hp) * 100, 0, 100)}%`;
+  } else {
+    prog = clamp(state.survival / 300, 0, 1);
+    label = `存活 ${Math.floor(state.survival)} 秒 · 容錯 ${Math.max(0, 20 - state.misses)} · Combo ${state.bestCombo}`;
   }
   if (force || label !== state.hud.prog) {
     dom.progressBar.style.width = `${(prog * 100).toFixed(1)}%`;
     dom.progressText.textContent = label;
     state.hud.prog = label;
   }
-  if (force) dom.levelName.textContent = `第 ${state.level} 關 · ${cfg.name}`;
+  const comboTxt = state.combo >= 3 ? `COMBO ×${state.combo}` : '';
+  if (force || comboTxt !== state.hud.combo) {
+    dom.combo.textContent = comboTxt;
+    dom.combo.classList.toggle('show', !!comboTxt);
+    state.hud.combo = comboTxt;
+  }
+  if (force) dom.levelName.textContent = state.endless ? '無盡狂暴模式 · ENDLESS' : `第 ${state.level} 關 · ${cfg.name}`;
 }
 
 function updateWeaponChip() {
@@ -1276,8 +1807,7 @@ function renderWeaponBar() {
     const locked = i >= state.unlocked;
     b.className = `wbtn${i === state.weaponIndex ? ' active' : ''}${locked ? ' locked' : ''}`;
     b.dataset.weapon = w.id;
-    b.innerHTML = `<span class="ico">${locked ? '🔒' : w.icon}</span>${w.short || w.name}` +
-      (locked ? `<span class="need">${w.unlock} 分</span>` : '');
+    b.innerHTML = `<span class="ico">${locked ? '🔒' : w.icon}</span>${locked ? w.unlock : w.short}`;
     if (!locked) b.addEventListener('pointerdown', (e) => { e.stopPropagation(); selectWeapon(i); });
     dom.weaponbar.appendChild(b);
   });
@@ -1290,53 +1820,89 @@ function showToast(text) {
   dom.toast.classList.add('show');
 }
 
-function showResult(win, reason) {
+function showResult(win, reason, board) {
   const cfg = state.levelConfig;
-  const last = state.level >= 3;
-  const stat = win
+  const last = !state.endless && state.level >= 5;
+  const stats = win
     ? `<div><span>本關得分</span><b>${state.levelScore}</b></div>
        <div><span>累積分數</span><b>${state.score}</b></div>
-       <div><span>空拍次數</span><b>${state.misses}</b></div>`
-    : `<div><span>失敗原因</span><b>${reason || '未達目標'}</b></div>
+       <div><span>空拍</span><b>${state.misses}</b></div>
+       ${cfg.goal.type === 'defend' ? `<div><span>剩餘衛生度</span><b>${Math.ceil(state.defend.hp)}</b></div>` : ''}`
+    : `<div><span>${state.endless ? '存活時間' : '失敗原因'}</span><b>${state.endless ? Math.round(state.survival) + ' 秒' : (reason || '未達目標')}</b></div>
        <div><span>本關得分</span><b>${state.levelScore}</b></div>
-       <div><span>進度</span><b>${cfg.goal.type === 'kills' ? state.kills + '/' + cfg.goal.target : state.levelScore + '/' + (cfg.goal.target || '—')}</b></div>`;
+       <div><span>最高 Combo</span><b>${state.bestCombo}</b></div>`;
+
+  const boardHtml = board && board.length
+    ? `<div class="board"><div class="bt">🏆 無盡模式排行</div>${board.map((b, i) =>
+        `<div><span>#${i + 1}</span><b>${b.survival} 秒 · Combo ${b.combo}</b></div>`).join('')}</div>`
+    : '';
+
+  const nextBtn = (!state.endless && win && !last)
+    ? '<button id="btnNext" class="primary">下一關 →</button>'
+    : (last ? '<button id="btnEndless" class="primary">進入無盡模式 →</button>'
+       : (state.endless ? '<button id="btnEndless" class="primary">再挑戰無盡</button>' : ''));
+
   dom.card.innerHTML = `
-    <h2>${win ? (last ? '🎉 全部關卡通關！' : '✅ 本關達成') : '💥 挑戰失敗'}</h2>
-    <p>${win ? '第 ' + state.level + ' 關 · ' + cfg.name : cfg.name}</p>
-    <div class="stats">${stat}</div>
+    <h2>${win ? (last ? '🎉 全部關卡通關！' : '✅ 本關達成') : (state.endless ? '🏁 無盡模式結束' : '💥 挑戰失敗')}</h2>
+    <p>${state.endless ? '無盡狂暴模式' : `第 ${state.level} 關 · ${cfg.name}`}</p>
+    <div class="stats">${stats}</div>
+    ${boardHtml}
     <div class="btns">
       <button id="btnRetry">重新挑戰</button>
-      ${win && !last ? '<button id="btnNext" class="primary">下一關 →</button>' : ''}
-      ${win && last ? '<button id="btnRestart" class="primary">再玩一次</button>' : ''}
+      ${nextBtn}
+      <button id="btnMenu">選關</button>
     </div>
     <div class="hint">${cfg.tip}</div>`;
   dom.modal.classList.remove('hidden');
-  document.getElementById('btnRetry').onclick = () => { Sfx.init(); startLevel(state.level); };
+  document.getElementById('btnRetry').onclick = () => {
+    Sfx.init();
+    if (state.endless) startEndless(); else startLevel(state.level);
+  };
   const next = document.getElementById('btnNext');
   if (next) next.onclick = () => { Sfx.init(); startLevel(state.level + 1); };
-  const restart = document.getElementById('btnRestart');
-  if (restart) restart.onclick = () => { Sfx.init(); startLevel(1, true); };
+  const endless = document.getElementById('btnEndless');
+  if (endless) endless.onclick = () => { Sfx.init(); startEndless(); };
+  document.getElementById('btnMenu').onclick = () => { Sfx.init(); showStart(); };
 }
 
 function showStart() {
   state.phase = 'menu';
+  state.endless = false;
+  dom.bossWrap.classList.remove('on', 'defend');
+  dom.combo.classList.remove('show');
+  const prog = loadProgress();
+  const chips = Object.entries(LEVELS).map(([n, cfg]) => {
+    const unlocked = levelUnlocked(+n);
+    const cleared = !!prog[n];
+    return `<button class="lv${unlocked ? '' : ' locked'}" data-level="${n}" ${unlocked ? '' : 'disabled'}>
+      <b>${cleared ? '★' : (unlocked ? '▶' : '🔒')} 第 ${n} 關</b><span>${cfg.name}</span></button>`;
+  }).join('');
+  const board = loadBoard();
+  const boardHtml = board.length
+    ? `<div class="board"><div class="bt">🏆 無盡模式最佳</div>${board.slice(0, 3).map((b, i) =>
+        `<div><span>#${i + 1}</span><b>${b.survival} 秒 · Combo ${b.combo}</b></div>`).join('')}</div>` : '';
+
   dom.card.innerHTML = `
     <h1>打擊蒼蠅大作戰</h1>
-    <div class="sub">V3 · FLY SWAT RAMPAGE</div>
-    <p>點擊 / 拍打螢幕上的蒼蠅，累積分數解鎖更強武器。</p>
-    <div class="stats">
-      <div><span>${WEAPONS[0].icon} 報紙</span><b>40px · 0.35s</b></div>
-      <div><span>${WEAPONS[2].icon} 電蚊拍</span><b>1,500 分解鎖</b></div>
-      <div><span>${WEAPONS[4].icon} 雷射炮</span><b>7,000 分解鎖</b></div>
-    </div>
-    <div class="btns"><button id="btnStart" class="primary">開始遊戲</button></div>
-    <div class="hint">第 1 關：西瓜 600 分 · 第 2 關：菜市場 40 隻 · 第 3 關：Boss 蠅王</div>`;
+    <div class="sub">V4 · FLY SWAT RAMPAGE</div>
+    <p>8 把武器 · 5 個關卡 · 無盡模式</p>
+    <div class="levels">${chips}</div>
+    <button class="lv endless${endlessUnlocked() ? '' : ' locked'}" id="btnEndlessMenu" ${endlessUnlocked() ? '' : 'disabled'}>
+      <b>${endlessUnlocked() ? '♾ 無盡狂暴模式' : '🔒 無盡（通關第 5 關解鎖）'}</b><span>容錯 20、每 60 秒迷你王</span></button>
+    ${boardHtml}
+    <div class="btns"><button id="btnStart" class="primary">從第 1 關開始</button></div>
+    <div class="hint">點擊／輕觸拍打 · 長按噴霧 · 底部可切換已解鎖武器</div>`;
   dom.modal.classList.remove('hidden');
   document.getElementById('btnStart').onclick = () => { Sfx.init(); startLevel(1, true); };
+  document.getElementById('btnEndlessMenu').onclick = () => { Sfx.init(); startEndless(); };
+  dom.card.querySelectorAll('.lv[data-level]').forEach((btn) => {
+    if (btn.disabled) return;
+    btn.onclick = () => { Sfx.init(); startLevel(+btn.dataset.level, false); };
+  });
 }
 
 /* ==================================================================== *
- * 12. 輸入（單指觸控 / 滑鼠）
+ * 12. 輸入
  * ==================================================================== */
 const pointerIds = new Set();
 
@@ -1368,13 +1934,13 @@ function releasePointer(e) {
 canvas.addEventListener('pointerup', releasePointer);
 canvas.addEventListener('pointercancel', releasePointer);
 canvas.addEventListener('lostpointercapture', releasePointer);
-document.addEventListener('gesturestart', (e) => e.preventDefault());
-document.addEventListener('dblclick', (e) => e.preventDefault());
 document.getElementById('muteBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   Sfx.init();
   Sfx.toggleMute();
 });
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 document.addEventListener('visibilitychange', () => { if (document.hidden) state.pointer.down = false; });
@@ -1384,10 +1950,28 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) state
  * ==================================================================== */
 function render() {
   ctx.save();
-  if (state.shake > 0.2) {
-    ctx.translate(rand(-state.shake, state.shake), rand(-state.shake, state.shake));
-  }
+  if (state.shake > 0.2) ctx.translate(rand(-state.shake, state.shake), rand(-state.shake, state.shake));
   drawBackground();
+
+  // 黏蠅紙
+  for (const t of state.traps) {
+    const k = clamp(1 - t.t / t.ttl, 0, 1);
+    ctx.globalAlpha = 0.55 * k + 0.15;
+    ctx.fillStyle = '#e8d98a';
+    ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.8 * k;
+    ctx.strokeStyle = '#b8a35a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(t.x, t.y, t.r * 0.96, 0, TAU); ctx.stroke();
+    for (let i = 0; i < 10; i++) {
+      const a = i * 0.9 + t.t;
+      ctx.beginPath();
+      ctx.moveTo(t.x + Math.cos(a) * t.r * 0.25, t.y + Math.sin(a) * t.r * 0.25);
+      ctx.lineTo(t.x + Math.cos(a) * t.r * 0.8, t.y + Math.sin(a) * t.r * 0.8);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // 毒霧
   for (const c of state.clouds) {
     const k = clamp(1 - c.t / c.ttl, 0, 1);
@@ -1398,36 +1982,48 @@ function render() {
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, TAU); ctx.fill();
   }
-  // 蒼蠅
+
   for (const f of state.flies) drawFly(f);
-  // 攻擊範圍提示
+
   if (state.phase === 'playing' && state.pointer.x >= 0) {
     const w = currentWeapon();
-    if (w.mode !== 'laser' && state.pointer.down) {   // 只在按住時顯示判定圈，避免手指離開後留下殘影
-      ctx.globalAlpha = state.pointer.down ? 0.28 : 0.12;
-      ctx.strokeStyle = w.id === 'electric' ? '#7fd4ff' : '#ffe6b8';
+    if (w.mode !== 'laser' && state.pointer.down) {
+      ctx.globalAlpha = 0.28;
+      ctx.strokeStyle = (w.id === 'electric' || w.id === 'twin') ? '#7fd4ff' : '#ffe6b8';
       ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(state.pointer.x, state.pointer.y, w.radius, 0, TAU); ctx.stroke();
+      const centers = w.twin ? [state.pointer.x - 55, state.pointer.x + 55] : [state.pointer.x];
+      for (const cx of centers) {
+        ctx.beginPath(); ctx.arc(cx, state.pointer.y, w.radius, 0, TAU); ctx.stroke();
+      }
       ctx.globalAlpha = 1;
     }
   }
-  // 雷射
+
   if (state.laser) {
     const k = 1 - state.laser.t / state.laser.ttl;
-    const y = state.laser.y;
-    const g = ctx.createLinearGradient(0, y - 26, 0, y + 26);
+    const y = state.laser.y, band = state.laser.band;
+    const g = ctx.createLinearGradient(0, y - band, 0, y + band);
     g.addColorStop(0, 'rgba(150, 230, 255, 0)');
     g.addColorStop(0.45, `rgba(190, 245, 255, ${0.55 * k})`);
     g.addColorStop(0.5, `rgba(255,255,255,${0.95 * k})`);
     g.addColorStop(0.55, `rgba(190, 245, 255, ${0.55 * k})`);
     g.addColorStop(1, 'rgba(150, 230, 255, 0)');
-    ctx.fillStyle = g; ctx.fillRect(0, y - 26, W, 52);
+    ctx.fillStyle = g; ctx.fillRect(0, y - band, W, band * 2);
   }
+
   drawEffects();
+
+  if (state.weaponLockT > 0) {
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
 }
 
 let lastT = performance.now();
+let frameCount = 0;
 function loop(now) {
   const dt = Math.min((now - lastT) / 1000, 0.05);
   lastT = now;
@@ -1436,7 +2032,6 @@ function loop(now) {
   frameCount++;
   requestAnimationFrame(loop);
 }
-let frameCount = 0;
 
 /* ==================================================================== *
  * 14. 啟動 + 測試鉤子
@@ -1454,22 +2049,42 @@ window.__game = {
   get flies() { return state.flies; },
   get boss() { return state.boss; },
   get clouds() { return state.clouds; },
+  get traps() { return state.traps; },
+  get defend() { return state.defend; },
   get effects() { return state.effects; },
   get frame() { return frameCount; },
   get weapon() { return currentWeapon().id; },
   get unlocked() { return state.unlocked; },
+  get progress() { return loadProgress(); },
+  get board() { return loadBoard(); },
   startLevel,
+  startEndless,
+  showStart,
   addScore,
-  spawnFly: (x, y, type) => pushFly(new Fly(type || 'house', { x, y })),
-  forceSummon: () => state.boss && state.boss.castSummon(),
-  forceStun: (t = 1.5) => { if (state.boss) { state.boss.stunT = t; state.boss.state = 'rest'; } },
+  spawnFly: (x, y, type) => {
+    const f = new Fly(type || 'house', { x, y });
+    if (state.levelConfig && state.levelConfig.defend && !f.friendly) {
+      const t = defendTarget();
+      f.targetPos = { x: t.x, y: t.y, r: t.r };
+    }
+    return pushFly(f);
+  },
+  spawnBee,
+  forceSummon: () => state.flies.find((f) => f.isBoss)?.castSummon(),
+  forceDive: () => state.flies.find((f) => f.isBoss && !f.isMiniBoss)?.startDive(),
+  forceExhaust: (t = 2) => { const b = state.flies.find((f) => f.isBoss); if (b) b.exhaustT = t; },
+  forceGust: () => { state.wind = { dir: 1, t: 1.3, strength: 260 }; state.gustT = LEVELS[4].gustEvery; },
+  forcePhase2: () => { const b = state.flies.find((f) => f.isBoss && !f.isMiniBoss); if (b) b.hp = Math.floor(b.maxHp * 0.4); },
   setTimeLeft: (v) => { state.timeLeft = v; },
   attack,
   viewport: () => ({ w: W, h: H, dpr: DPR }),
   currentWeapon,
   audio: Sfx,
   voice: Voice,
+  saveProgress,
+  clearEndlessBoard: () => { try { localStorage.removeItem(BOARD_KEY); } catch (e) { /* ignore */ } },
 };
+
 </script>
 </body>
 </html>
