@@ -1,0 +1,5 @@
+# 測試產物（每次 verify_smoke.py 重新產生）
+artifacts/
+__pycache__/
+*.pyc
+.DS_Store

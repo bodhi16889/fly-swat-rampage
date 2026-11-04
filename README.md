@@ -4,6 +4,8 @@
 直向滿版（`viewport-fit=cover` + `touch-action: none`），手機瀏覽器打開就能玩。
 
 > 🌐 線上版：<https://bodhi16889.github.io/fly-swat-rampage/>
+> 🎮 GamePix 上架包：`dist/fly-swat-rampage-gamepix.zip`（ZIP 根目錄即 `index.html`，約 130 KB）；
+> 素材在 `gamepix/assets/`；填表文案與合規自查見 [`GAMEPIX_SUBMISSION.md`](GAMEPIX_SUBMISSION.md)。
 > 另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)
 
 ## 玩法
@@ -12,7 +14,7 @@
 | :--- | :--- |
 | 點擊 / 輕觸 | 依當前武器判定（單點 / AOE / 扇形 / 陷阱 / 射線） |
 | 長按滑動 | 殺蟲噴霧：按住連續噴出毒霧 |
-| 底部武器列 | 已解鎖的 8 把武器常駐，可隨時點選切換 |
+| 底部武器列 | 已解鎖的 8 把武器常駐，可隨時點選切換；解鎖進度存在 `localStorage`，重開頁面不會消失 |
 | 選關卡 | 開場卡片可選已解鎖關卡；通過第 5 關解鎖無盡模式 |
 
 ## 武器（V4：8 把，雙分支）
@@ -63,12 +65,14 @@ python -m http.server 8099          # 8099 被佔用時改 8787
 ## 驗證（Playwright，可重跑）
 
 ```powershell
+python -m pip install --user playwright   # 第一次
+python -m playwright install chromium     # 第一次
 python verify_smoke.py                                  # 本機，自動選空閒埠
 python verify_smoke.py --headed                         # 想看畫面
 python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（48 項檢查）：
+覆蓋範圍（61 項檢查）：
 
 - 版面 / 主循環 / 選關卡（5 關 + 無盡未解鎖）/ 8 武器列
 - 武器門檻 `[0,400,1000,1800,3000,4500,6500,9000]`
@@ -80,9 +84,17 @@ python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/
 - 第 5 關：80 HP、護盾 10 隻時 Boss 免疫、雷射穿透 −8、Phase 2 俯衝後力竭、
   力竭期間 1 傷實扣 2、通關寫入進度並解鎖無盡
 - 無盡：存活計時、迷你蠅王、容錯用完寫入排行
+- 武器解鎖持久化：重新載入後 8 把仍在、預設選最強那把；「從第 1 關開始」會歸零
+- GamePix SDK：manual lifecycle（loading/loaded/gameStart）、pause/resume、插頁廣告時機、
+  獎勵廣告復活（關卡 +15 秒／無盡容錯歸零，每局一次）、沒有 SDK 時 no-op
+- 語系：英文為預設、`zh` 系統語言顯示中文（GamePix 語言規範）
+- 640×480 iframe：選單可捲動、可進關卡、武器列在畫面內
 - 音效分層＋人聲（擊殺／蠅王）＋靜音完全靜音
 - 手機 Pixel 5：直向版面、8 武器列、觸控拍打計分
 - 全程無 console / page error
+
+判定時間一律用 `wait_for_function`（等狀態變化）而不是固定 `sleep`：
+headless + SwiftShader 前 1–2 秒只有 1–2 fps，用睡眠會量到暖機或拍到蒼蠅飛走前的舊座標。
 
 最近一次結果：
 
@@ -103,6 +115,7 @@ python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/
 [PASS] 力竭期間受到雙倍傷害（1 傷 → 2） — {'hp0': 32, 'hp1': 30}
 [PASS] Boss 倒下 → 通關並存進度（解鎖無盡） / 擊倒蠅王有人聲「你有病喔」
 [PASS] 通關第 5 關後解鎖無盡模式 / 無盡模式啟動 / 迷你蠅王會出現 / 容錯用完寫入排行
+[PASS] 武器解鎖持久化：重新載入後仍保有 8 把 / 從第 1 關重新開始會重置累積分數與武器
 [PASS] 靜音：音效與人聲都不播
 [PASS] 手機（Pixel 5）：直向版面 + 8 武器列 / 手機觸控拍打計分
 RESULT: PASS
@@ -114,22 +127,35 @@ RESULT: PASS
 
 | 區塊 | 內容 |
 | :--- | :--- |
-| 1 / 1b | `Sfx`（分層音效＋壓縮器＋靜音）、`Voice`（內嵌 SAPI 人聲） |
+| 0b / 0c | 語系 `I18N`／`t()`（en 預設、zh）、GamePix `GP`（lifecycle／pause／廣告／復活） |
+| 1 / 1b | `Sfx`（分層音效＋壓縮器＋靜音）、`Voice`（中文內嵌語音；英文用瀏覽器 TTS） |
 | 2 | `WEAPONS`（8）、`FLY_TYPES`（8 種含蜜蜂/金斑/迷你王）、`LEVELS`（5）、`ENDLESS_CFG` |
 | 3 | `state`：分數、解鎖、陷阱、毒霧、可頌、蜜蜂、突風、Combo、無盡計時 |
 | 4 | `Fly`：遊走／停歇／定身／`targetPos`→`eating`／偽裝透明度／Boss 二階段／俯衝／力竭 |
-| 5 | 分數、解鎖、進度存檔（`localStorage`）、無盡排行 |
+| 5 | 分數、解鎖、進度存檔（`localStorage`：`fly.swat.progress` 關卡、`fly.swat.score` 累積分數→武器解鎖、`fly.swat.endless` 排行） |
 | 6 | `attack()` 七種模式分派 → `tapStrike`（單點/AOE/連鎖/雙持）、`fireSalt`、`placeTrap`、`spawnCloud`、`fireLaser`、`damageFly`（易傷/護盾/階段集中處理） |
 | 7 | 粒子與特效（環、電弧、扇形、文字、閃光） |
 | 8 | 5 種程序化場景（客廳／菜市場／麵包店櫥窗／露營草地／雨夜後巷） |
 | 9 | 蒼蠅繪製（蜜蜂條紋、金斑偽裝、Boss 護盾與 Phase 2 眼紅） |
 | 10 | `update()`：生成、突風、毒霧 tick、陷阱、可頌扣血、護盾環繞、目標判定、無盡節奏 |
-| 11 | HUD（倒數/進度/可頌衛生度/Boss/Combo）、選關卡、結算、無盡排行 |
+| 11 | HUD（倒數/進度/可頌衛生度/Boss/Combo）、選關卡、結算（含獎勵廣告復活）、無盡排行 |
 | 12–14 | 輸入（Pointer Events）、繪製、啟動與 `window.__game` 測試鉤子 |
 
 測試鉤子：`startLevel(n)`、`startEndless()`、`showStart()`、`addScore(n)`、`spawnFly(x,y,type)`、
 `spawnBee()`、`forceSummon()`、`forceDive()`、`forceExhaust(t)`、`forceGust()`、`forcePhase2()`、
-`setTimeLeft(t)`、`attack(x,y)`，以及 `state / flies / boss / defend / traps / clouds / effects / weapon / progress / board / frame / audio / voice`。
+`setTimeLeft(t)`、`attack(x,y)`、`clearScore()`，以及 `state / flies / boss / defend / traps / clouds / effects / weapon / progress / board / frame / audio / voice`。
+
+## GamePix 打包與上架
+
+```bash
+python3 build_gamepix.py        # dist/fly-swat-rampage-gamepix.zip（ZIP 根目錄只有 index.html）
+python3 gamepix/make_assets.py  # icon 512 / cover 1920×1080 / 5 張 1080×1920 截圖
+python3 verify_smoke.py         # 61 項，含 SDK lifecycle／廣告／關卡復活／無盡續命／640×480
+```
+
+SDK 已接：`GamePixConfig = { lifecycle: 'manual' }`、`loading → loaded → gameStart`、
+`pause/resume`（停時鐘＋停音訊）、關卡之間的插頁廣告、獎勵廣告復活（關卡 +15 秒；無盡容錯歸零並收回當次排行；每局一次）。
+語言：`navigator.language` 為 `zh*` 顯示中文，其餘一律英文。上架欄位與合規自查見 `GAMEPIX_SUBMISSION.md`。
 
 ## 發佈到 GitHub Pages
 

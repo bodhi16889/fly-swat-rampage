@@ -7,6 +7,9 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <title>打擊蒼蠅大作戰 V4 · Fly Swat Rampage</title>
+<!-- GamePix SDK v3：必須先設 config 再載入 SDK（manual lifecycle 才有載入進度與 gameStart 訊號） -->
+<script>window.GamePixConfig = { lifecycle: 'manual' };</script>
+<script src="https://integration.gamepix.com/sdk/v3/gamepix.sdk.js"></script>
 <style>
   :root {
     --ink: #f4ede2;
@@ -140,6 +143,7 @@
   #modal.hidden { opacity: 0; pointer-events: none; }
   .card {
     width: min(420px, 92vw); padding: 22px 20px; text-align: center;
+    max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch;
     background: linear-gradient(180deg, rgba(38, 26, 16, .96), rgba(18, 12, 8, .96));
     border: 1px solid rgba(255, 190, 110, .35); border-radius: 18px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
@@ -159,11 +163,33 @@
   }
   button.primary { background: linear-gradient(180deg, #ffb347, #ef8c2e); color: #2a1706; font-weight: 700; border-color: transparent; }
   button:active { transform: translateY(1px); }
+  button:disabled { opacity: .55; cursor: default; }
+  button.reward { border-color: rgba(127, 224, 160, .65); color: #bff5d0; background: rgba(127, 224, 160, .12); }
   .hint { margin-top: 12px; font-size: 11px; color: #8d7c66; line-height: 1.7; }
+
+  /* ---------- 載入畫面（GamePix 規定要有） ---------- */
+  #loading {
+    position: fixed; inset: 0; z-index: 60; display: grid; place-content: center; gap: 14px;
+    justify-items: center; background: radial-gradient(circle at 50% 40%, #241a10, #0d0a07 70%);
+    transition: opacity .35s ease; text-align: center; padding: 24px;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  #loading .lt { font-size: 20px; letter-spacing: .18em; color: var(--amber); }
+  #loading .lsub { font-size: 11px; letter-spacing: .3em; color: #9d8b74; }
+  #loading .lbar { width: 180px; height: 6px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; }
+  #loading .lbar i { display: block; height: 100%; width: 8%; border-radius: 6px; background: linear-gradient(90deg,#ffb347,#ffd98a); transition: width .2s linear; }
+  #loading .lp { font-size: 11px; color: #8d7c66; letter-spacing: .12em; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+
+<div id="loading">
+  <div class="lt">FLY SWAT RAMPAGE</div>
+  <div class="lsub" id="loadingSub">打擊蒼蠅大作戰</div>
+  <div class="lbar"><i></i></div>
+  <div class="lp">Loading…</div>
+</div>
 
 <div id="hud">
   <div class="hud-row">
@@ -282,6 +308,18 @@ const Sfx = {
     if (btn) btn.textContent = this.muted ? '\uD83D\uDD07' : '\uD83D\uDD0A';
   },
   toggleMute() { this.setMuted(!this.muted); },
+
+  /* GamePix 規定廣告／暫停時必須停音訊，恢復時只依原本靜音設定還原 */
+  suspend() {
+    if (this.ctx && this.ctx.state === 'running') {
+      try { this.ctx.suspend(); } catch (e) { /* ignore */ }
+    }
+  },
+  wake() {
+    if (this.ctx && this.ctx.state === 'suspended' && !this.muted) {
+      try { this.ctx.resume(); } catch (e) { /* ignore */ }
+    }
+  },
 
   noise(dur, freq, q, gain, type = 'bandpass') {
     if (!this.ctx || this.muted) return;
@@ -410,15 +448,23 @@ const Voice = {
     if (now - this.lastKillAt < this.minGap) return;
     this.lastKillAt = now;
     this._log('kill');
-    const name = this.killIndex++ % 2 === 0 ? 'kill_a' : 'kill_b';
-    if (!this.play(name, 0.75)) this.speak('什麼意思');
+    const i = this.killIndex++;
+    if (LANG === 'zh') {
+      if (!this.play(i % 2 === 0 ? 'kill_a' : 'kill_b', 0.75)) this.speak(I18N.zh.voiceKill[0]);
+    } else {
+      this.speak(I18N.en.voiceKill[i % I18N.en.voiceKill.length]);
+    }
   },
 
   /* 擊倒蠅王：延後 0.32s 進（先讓 bossDown 的低頻炸開）*/
   boss() {
     if (!this.enabled || Sfx.muted) return;
     this._log('boss');
-    if (!this.play('boss', 0.95)) this.speak('你有病喔');
+    if (LANG === 'zh') {
+      if (!this.play('boss', 0.95)) this.speak(I18N.zh.voiceBoss);
+    } else {
+      this.speak(I18N.en.voiceBoss);
+    }
   },
 
   /* 內嵌音檔解不開時的退路：瀏覽器 TTS */
@@ -529,13 +575,360 @@ const state = {
   combo: 0,
   comboT: 0,
   bestCombo: 0,
+  paused: false,
+  revived: false,
   spawnTimer: 0,
   miniBossT: 0,
+  endlessEntryAt: null,
   levelConfig: null,
   hud: { timer: '', score: '', prog: '', weapon: '', combo: '' },
 };
 let W = 0, H = 0, DPR = 1;
 let timeAlive = 0;
+
+/* ==================================================================== *
+ * 0b. 語系：GamePix 規定「不支援的語言一律英文」，中文只給 zh 語系
+ * ==================================================================== */
+const I18N = {
+  en: {
+    playHint: 'Tap to swat · hold to spray · switch unlocked weapons below',
+    levelN: 'Level {n} · {name}',
+    endlessTitle: 'Endless Rampage · ENDLESS',
+    scoreUnit: 'pts',
+    gameTitle: 'FLY SWAT RAMPAGE',
+    tagline: '8 weapons · 5 levels · Endless mode',
+    levelShort: 'Level {n}',
+    goalScore: '{a} / {b} pts',
+    goalKills: '{a} / {b} flies',
+    goalMisses: ' · misses {a}/{b}',
+    goalBees: ' · bees {a}/{b}',
+    goalHygiene: 'Freshness {hp} / 100',
+    hygieneName: 'Strawberry croissant · freshness',
+    bossName: 'Fly King · LORD OF THE SWARM',
+    bossHp: 'Fly King {hp} / {max}',
+    bossShielded: ' · shielded',
+    bossDown: 'Fly King down',
+    survival: 'Alive {s}s · misses left {m} · best combo {c}',
+    combo: 'COMBO ×{n}',
+    endlessCard: '♾ Endless Rampage',
+    endlessLocked: '🔒 Endless (clear Level 5)',
+    endlessSub: '20 misses allowed · mini boss every 60s',
+    startFrom1: 'Start from Level 1',
+    weaponUp: 'Weapon upgraded! {name}',
+    beeHitText: '-200 BEE!',
+    beeHit: 'Friendly bee hit! Weapon frozen 1s ({a}/{b})',
+    crit: 'CRIT',
+    shield: 'SHIELD',
+    gust: 'Gust incoming!',
+    miniBoss: 'Mini Fly King!',
+    rage: 'Fly King enraged! Speed ×1.5',
+    summonBoss: 'Fly storm! Shields up',
+    summonMini: 'Mini Fly King summons minions',
+    dive: 'Sonic dive!',
+    lostCroissant: 'The croissant was eaten',
+    tooManyMisses: 'Too many misses',
+    tooManyBees: 'Too many friendly bees hit',
+    timeUp: 'Time up',
+    endlessOver: 'Out of lives ({n} misses)',
+    winAll: '🎉 All levels cleared!',
+    winLevel: '✅ Level cleared',
+    loseTitle: '💥 Level failed',
+    endlessEnd: '🏁 Endless run over',
+    thisRun: 'This run',
+    totalScore: 'Total score',
+    missesLabel: 'Misses',
+    hygieneLeft: 'Freshness left',
+    reasonLabel: 'Failed because',
+    survived: 'Survived',
+    bestCombo: 'Best combo',
+    notReached: 'Goal not reached',
+    secondsShort: '{n}s',
+    nextLevel: 'Next level →',
+    enterEndless: 'Enter Endless →',
+    againEndless: 'Play Endless again',
+    retry: 'Retry',
+    levels: 'Levels',
+    revive: 'Watch ad to revive (+15s, clears misses · once per run)',
+    reviveEndless: 'Watch ad to keep going (clears misses · once per run)',
+    reviving: 'Loading ad…',
+    reviveFailed: 'Ad not completed — no revive',
+    revived: 'Revived! +15 seconds',
+    revivedEndless: 'Back in the fight! Misses cleared.',
+    boardTitle: '🏆 Endless best',
+    boardRow: '#{i} · {s}s · combo {c}',
+    levelCleared: '★',
+    locked: '🔒',
+    tips: {
+      1: 'Swat a fly while it sits on the watermelon → double points',
+      2: 'Green bottle flies take 2 hits; electric swatter clears fruit-fly swarms',
+      3: 'Flies eating the croissant drain 5 freshness per second; gold flies nearly vanish at rest',
+      4: 'Bees are friendly: −200 points and a 1s weapon freeze; more than 2 hits fails',
+      5: 'Phase 1 has shields (clear the minions); Phase 2 dives exhaust the King for 2s — double damage',
+      endless: '20 misses allowed; a mini Fly King every 60s; survive as long as you can',
+    },
+    weaponNames: {
+      newspaper: 'Rolled Newspaper', swatter: 'Plastic Fly Swatter', trap: 'Flypaper Trap',
+      electric: 'Electric Swatter', salt: 'Salt Shotgun', spray: 'Insect Spray',
+      twin: 'Dual Electric Swatters', laser: 'Extermination Laser',
+    },
+    weaponShorts: {
+      newspaper: 'Paper', swatter: 'Swatter', trap: 'Paper', electric: 'Zapper',
+      salt: 'Salt', spray: 'Spray', twin: 'Dual', laser: 'Laser',
+    },
+    levelNames: {
+      1: 'Watermelon Slice Living Room', 2: 'Busy Traditional Market', 3: 'Bakery Window Defence',
+      4: 'Campsite Picnic Blanket', 5: 'Back-Alley Showdown',
+    },
+    voiceKill: ['Seriously?', 'What was that?'],
+    voiceBoss: 'You are insane',
+  },
+  zh: {
+    playHint: '點擊／輕觸拍打 · 長按噴霧 · 底部可切換已解鎖武器',
+    levelN: '第 {n} 關 · {name}',
+    endlessTitle: '無盡狂暴模式 · ENDLESS',
+    scoreUnit: '分',
+    gameTitle: '打擊蒼蠅大作戰',
+    tagline: '8 把武器 · 5 個關卡 · 無盡模式',
+    levelShort: '第 {n} 關',
+    goalScore: '{a} / {b} 分',
+    goalKills: '{a} / {b} 隻',
+    goalMisses: ' · 空拍 {a}/{b}',
+    goalBees: ' · 蜜蜂 {a}/{b}',
+    goalHygiene: '衛生度 {hp} / 100',
+    hygieneName: '草莓可頌 · 衛生度',
+    bossName: '腐敗蠅王 · LORD OF THE SWARM',
+    bossHp: '蠅王 {hp} / {max}',
+    bossShielded: ' · 護盾中',
+    bossDown: '蠅王已倒下',
+    survival: '存活 {s} 秒 · 容錯 {m} · Combo {c}',
+    combo: 'COMBO ×{n}',
+    endlessCard: '♾ 無盡狂暴模式',
+    endlessLocked: '🔒 無盡（通關第 5 關解鎖）',
+    endlessSub: '容錯 20、每 60 秒迷你王',
+    startFrom1: '從第 1 關開始',
+    weaponUp: '武器升級！{name}',
+    beeHitText: '-200 蜜蜂!',
+    beeHit: '誤擊蜜蜂！武器凍結 1 秒（{a}/{b}）',
+    crit: '暴擊',
+    shield: '護盾',
+    gust: '突風颳起！',
+    miniBoss: '迷你蠅王出現！',
+    rage: '蠅王狂暴！速度 ×1.5',
+    summonBoss: '蒼蠅風暴！護盾生成',
+    summonMini: '迷你蠅王召喚子嗣',
+    dive: '音速俯衝！',
+    lostCroissant: '可頌被吃光了',
+    tooManyMisses: '空拍次數過多',
+    tooManyBees: '誤擊蜜蜂太多次',
+    timeUp: '時間到',
+    endlessOver: '容錯用完（{n} 次空拍）',
+    winAll: '🎉 全部關卡通關！',
+    winLevel: '✅ 本關達成',
+    loseTitle: '💥 挑戰失敗',
+    endlessEnd: '🏁 無盡模式結束',
+    thisRun: '本關得分',
+    totalScore: '累積分數',
+    missesLabel: '空拍',
+    hygieneLeft: '剩餘衛生度',
+    reasonLabel: '失敗原因',
+    survived: '存活時間',
+    bestCombo: '最高 Combo',
+    notReached: '未達目標',
+    secondsShort: '{n} 秒',
+    nextLevel: '下一關 →',
+    enterEndless: '進入無盡模式 →',
+    againEndless: '再挑戰無盡',
+    retry: '重新挑戰',
+    levels: '選關',
+    revive: '看廣告復活（+15 秒、失誤歸零 · 每局一次）',
+    reviveEndless: '看廣告續命（容錯歸零 · 每局一次）',
+    reviving: '廣告載入中…',
+    reviveFailed: '廣告未完成，未復活',
+    revived: '復活！+15 秒',
+    revivedEndless: '續命成功！容錯歸零',
+    boardTitle: '🏆 無盡模式排行',
+    boardRow: '#{i} · {s} 秒 · Combo {c}',
+    levelCleared: '★',
+    locked: '🔒',
+    tips: {
+      1: '蒼蠅停在西瓜上時擊殺 → 分數雙倍',
+      2: '綠頭大蒼蠅要打 2 下；果蠅群適合用電蚊拍一次電掉',
+      3: '蒼蠅停在可頌上會每秒扣 5 點衛生度；金斑麗蠅靜止時幾乎隱形',
+      4: '蜜蜂是友軍：誤擊扣 200 分並凍結武器 1 秒，超過 2 次就失敗',
+      5: 'Phase 1 有護盾（先清子嗣）；Phase 2 俯衝後力竭 2 秒，此時傷害雙倍',
+      endless: '容錯 20 次空拍；每 60 秒出迷你蠅王，結束後記錄存活時間與最高 Combo',
+    },
+    weaponNames: {
+      newspaper: '捲起來的報紙', swatter: '傳統塑膠蒼蠅拍', trap: '黏蠅紙陷阱板',
+      electric: '電蚊拍', salt: '散彈鹽狗散彈槍', spray: '強效殺蟲噴霧',
+      twin: '雙持高壓電蚊拍', laser: '終極除蟲雷射炮',
+    },
+    weaponShorts: {
+      newspaper: '報紙', swatter: '塑膠拍', trap: '黏紙', electric: '電蚊拍',
+      salt: '鹽槍', spray: '噴霧', twin: '雙拍', laser: '雷射',
+    },
+    levelNames: {
+      1: '夏日客廳的西瓜切片', 2: '熱鬧的傳統菜市場', 3: '麵包店的櫥窗保衛戰',
+      4: '戶外露營區的野餐墊', 5: '後巷廚餘桶的決戰',
+    },
+    voiceKill: ['什麼意思', '什麼意思'],
+    voiceBoss: '你有病喔',
+  },
+};
+
+function detectLang() {
+  try {
+    const q = new URLSearchParams(location.search).get('lang');
+    if (q) return /^zh/i.test(q) ? 'zh' : 'en';
+    const list = (navigator.languages && navigator.languages.length)
+      ? navigator.languages : [navigator.language || 'en'];
+    for (const l of list) if (/^zh/i.test(l)) return 'zh';
+  } catch (e) { /* ignore */ }
+  return 'en';
+}
+const LANG = detectLang();
+
+/* t('key', {a: 1}) —— 找不到 key 就回英文，再找不到就回 key 本身 */
+function t(key, vars) {
+  const pack = I18N[LANG] || I18N.en;
+  let s = pack[key];
+  if (s === undefined) s = I18N.en[key];
+  if (s === undefined) return key;
+  if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
+  return s;
+}
+function wName(w) { return I18N[LANG].weaponNames[w.id] || w.name; }
+function wShort(w) { return I18N[LANG].weaponShorts[w.id] || w.short; }
+function lvName(n) { return I18N[LANG].levelNames[n] || LEVELS[n].name; }
+function lvTip(n) {
+  const s = (I18N[LANG].tips && I18N[LANG].tips[n]) || (I18N.en.tips && I18N.en.tips[n]);
+  return s || (LEVELS[n] && LEVELS[n].tip) || '';
+}
+
+/* ==================================================================== *
+ * 0c. GamePix SDK 包裝（沒有 SDK 時全部 no-op，遊戲照常可玩）
+ * ==================================================================== */
+const GP = {
+  enabled: false, loadedDone: false, started: false, adBusy: false,
+  calls: [], log: [], pauseReasons: new Set(),
+
+  api() { return (typeof window !== 'undefined' && window.GamePix) || null; },
+  log_(name) { this.log.push(name); if (this.log.length > 160) this.log.shift(); },
+
+  init() {
+    const api = this.api();
+    if (!api) return false;
+    try {
+      if (api.events && typeof api.events.on === 'function') {
+        api.events.on('pause', () => this.pause('sdk'));
+        api.events.on('resume', () => this.resume('sdk'));
+      }
+      this.enabled = true;
+    } catch (e) { this.enabled = false; }
+    this.loading(5);
+    return this.enabled;
+  },
+
+  loading(pct) {
+    this.log_('loading:' + pct);
+    const api = this.api();
+    try {
+      if (api && api.lifecycle && typeof api.lifecycle.loading === 'function') api.lifecycle.loading(pct);
+      else if (api && typeof api.loading === 'function') api.loading(pct);
+    } catch (e) { /* ignore */ }
+  },
+
+  async loaded() {
+    if (this.loadedDone) return;
+    this.loadedDone = true;
+    this.log_('loaded');
+    const api = this.api();
+    try {
+      if (api && api.lifecycle && typeof api.lifecycle.loaded === 'function') {
+        await Promise.race([api.lifecycle.loaded(), new Promise((r) => setTimeout(r, 3000))]);
+      } else if (api && typeof api.loaded === 'function') {
+        await Promise.race([api.loaded(), new Promise((r) => setTimeout(r, 3000))]);
+      }
+    } catch (e) { /* ignore */ }
+  },
+
+  gameStart() {
+    if (this.started) return false;
+    this.started = true;
+    this.log_('gameStart');
+    const api = this.api();
+    try {
+      if (api && api.lifecycle && typeof api.lifecycle.gameStart === 'function') return api.lifecycle.gameStart();
+      if (api && typeof api.gameStart === 'function') return api.gameStart();
+    } catch (e) { /* ignore */ }
+    return false;
+  },
+
+  moment(kind, type) {
+    const api = this.api();
+    try {
+      if (api && typeof api[kind] === 'function') api[kind](type);
+    } catch (e) { /* ignore */ }
+  },
+
+  /* 暫停必須同時停遊戲時鐘、輸入與音訊；可重入且冪等 */
+  pause(reason) {
+    this.pauseReasons.add(reason || 'external');
+    if (state.paused) return;
+    state.paused = true;
+    state.pointer.down = false;
+    Sfx.suspend();
+    this.log_('pause');
+  },
+  resume(reason) {
+    this.pauseReasons.delete(reason || 'external');
+    if (!state.paused || this.pauseReasons.size) return;
+    state.paused = false;
+    Sfx.wake();
+    this.log_('resume');
+  },
+
+  _withTimeout(p) {
+    return Promise.race([p, new Promise((resolve) => setTimeout(() => {
+      this.adBusy = false;
+      resolve({ success: false, message: 'timeout' });
+    }, 9000))]);
+  },
+
+  _ad(kind) {
+    if (this.adBusy) return Promise.resolve({ success: false, message: 'busy' });
+    const api = this.api();
+    const modern = api && api.ads && typeof api.ads[kind] === 'function';
+    const legacyName = kind === 'interstitial' ? 'interstitialAd' : 'rewardAd';
+    const legacy = api && typeof api[legacyName] === 'function';
+    if (!modern && !legacy) {
+      this.log_('ad:' + kind + ':no-sdk');
+      return Promise.resolve({ success: false, message: 'no-sdk' });
+    }
+    this.adBusy = true;
+    let p;
+    try {
+      p = modern ? api.ads[kind]() : api[legacyName]();
+    } catch (e) {
+      this.adBusy = false;
+      return Promise.resolve({ success: false, message: 'error' });
+    }
+    return Promise.resolve(p).catch(() => ({ success: false })).then((res) => {
+      this.adBusy = false;
+      const out = (res && typeof res === 'object') ? res : { success: false };
+      this.calls.push({ kind, success: !!out.success });
+      this.log_('ad:' + kind + ':' + (out.success ? 'ok' : 'no'));
+      return out;
+    });
+  },
+  interstitial() { return this._withTimeout(this._ad('interstitial')); },
+  reward() { return this._withTimeout(this._ad('reward')); },
+
+  hideLoading() {
+    const el = document.getElementById('loading');
+    if (el) el.classList.add('hidden');
+  },
+};
 
 /* ==================================================================== *
  * 4. 蒼蠅
@@ -737,14 +1130,14 @@ class Fly {
     }
     state.effects.push({ type: 'wave', x: this.x, y: this.y, r: 24, ttl: 0.6, t: 0, color: '#ff7a6a' });
     this.stunT = 1.2;
-    showToast(this.isMiniBoss ? '迷你蠅王召喚子嗣' : '蒼蠅風暴！護盾生成');
+    showToast(t(this.isMiniBoss ? 'summonMini' : 'summonBoss'));
     Sfx.buzz();
   }
 
   startDive() {
     this.dive = { t: 0, telegraph: 0.55, tx: rand(W * 0.2, W * 0.8), ty: H * 0.82 };
     state.effects.push({ type: 'wave', x: this.x, y: this.y, r: 20, ttl: 0.5, t: 0, color: '#ff5a4a' });
-    showToast('音速俯衝！');
+    showToast(t('dive'));
     Sfx.buzz();
   }
 
@@ -781,6 +1174,23 @@ class Fly {
  * ==================================================================== */
 const PROGRESS_KEY = 'fly.swat.progress';
 const BOARD_KEY = 'fly.swat.endless';
+const SCORE_KEY = 'fly.swat.score';
+
+/* 累積分數是武器解鎖的唯一依據；存起來，重開頁面才不會被打回報紙 */
+function loadScore() {
+  try {
+    const v = parseInt(localStorage.getItem(SCORE_KEY) || '0', 10);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  } catch (e) { return 0; }
+}
+function saveScore() {
+  try { localStorage.setItem(SCORE_KEY, String(state.score)); } catch (e) { /* 私密模式 */ }
+}
+function unlockedFromScore(score) {
+  let n = 1;
+  while (n < WEAPONS.length && score >= WEAPONS[n].unlock) n++;
+  return n;
+}
 
 function loadProgress() {
   try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch (e) { return {}; }
@@ -802,6 +1212,13 @@ function endlessUnlocked() { return !!loadProgress()[5]; }
 function loadBoard() {
   try { return JSON.parse(localStorage.getItem(BOARD_KEY) || '[]'); } catch (e) { return []; }
 }
+function removeBoardEntry(at) {
+  if (!at) return;
+  try {
+    const board = loadBoard().filter((e) => e.at !== at);
+    localStorage.setItem(BOARD_KEY, JSON.stringify(board));
+  } catch (e) { /* ignore */ }
+}
 function saveBoard(entry) {
   const board = loadBoard();
   board.push(entry);
@@ -815,6 +1232,7 @@ function addScore(n) {
   state.score = Math.max(0, state.score + n);
   if (n > 0) state.levelScore += n;
   checkUnlock();
+  saveScore();
 }
 
 function checkUnlock() {
@@ -824,7 +1242,7 @@ function checkUnlock() {
     const latest = WEAPONS[next - 1];
     state.unlocked = next;
     state.weaponIndex = next - 1;
-    showToast(`武器升級！${latest.name}`);
+    showToast(t('weaponUp', { name: wName(latest) }));
     Sfx.upgrade();
     state.effects.push({ type: 'flash', ttl: 0.35, t: 0, color: latest.id === 'laser' ? '#a8e6ff' : '#ffe0a8' });
     renderWeaponBar();
@@ -853,10 +1271,10 @@ function addBeeHit(bee) {
   addScore(-200);
   state.combo = 0;
   state.weaponLockT = 1.0;
-  state.effects.push({ type: 'text', x: bee.x, y: bee.y - 20, ttl: 0.9, t: 0, text: '-200 蜜蜂!', color: '#ffd166' });
+  state.effects.push({ type: 'text', x: bee.x, y: bee.y - 20, ttl: 0.9, t: 0, text: t('beeHitText'), color: '#ffd166' });
   state.effects.push({ type: 'wave', x: bee.x, y: bee.y, r: 18, ttl: 0.5, t: 0, color: '#ffd166' });
   Sfx.lose();
-  showToast(`誤擊蜜蜂！武器凍結 1 秒（${state.beeHits}/${LEVELS[4].goal.maxBeeHits}）`);
+  showToast(t('beeHit', { a: state.beeHits, b: LEVELS[4].goal.maxBeeHits }));
 }
 
 /* ==================================================================== *
@@ -873,6 +1291,7 @@ function fliesWithin(x, y, radius) {
 }
 
 function attack(x, y) {
+  if (state.paused) return;
   if (state.phase !== 'playing') return;
   if (state.weaponLockT > 0) return;              // 誤擊蜜蜂的處罰
   const w = currentWeapon();
@@ -966,7 +1385,7 @@ function fireSalt(x, y, w) {
     any = true;
     const crit = ang < half / 2.5;                 // 扇心
     damageFly(f, crit ? w.centerDamage : w.edgeDamage, f.x, f.y, { crit });
-    if (crit) state.effects.push({ type: 'hit', x: f.x, y: f.y, ttl: 0.3, t: 0, color: '#ffd166', label: '暴擊' });
+    if (crit) state.effects.push({ type: 'hit', x: f.x, y: f.y, ttl: 0.3, t: 0, color: '#ffd166', label: t('crit') });
   }
   if (!any) state.misses++;
   state.shake = 5;
@@ -1008,7 +1427,7 @@ function damageFly(f, dmg, hx, hy, opts = {}) {
 
   if (f.isBoss) {
     if (f.shieldCount > 0 && !opts.pierce) {
-      state.effects.push({ type: 'hit', x: hx, y: hy, ttl: 0.25, t: 0, color: '#7fd4ff', label: '護盾' });
+      state.effects.push({ type: 'hit', x: hx, y: hy, ttl: 0.25, t: 0, color: '#7fd4ff', label: t('shield') });
       Sfx.hit('shield');
       return;
     }
@@ -1460,7 +1879,7 @@ function resize() {
 }
 
 function startLevel(n, resetRun = false) {
-  if (resetRun) { state.score = 0; state.unlocked = 1; state.weaponIndex = 0; }
+  if (resetRun) { state.score = 0; state.unlocked = 1; state.weaponIndex = 0; saveScore(); }
   state.endless = false;
   state.level = n;
   state.phase = 'playing';
@@ -1481,6 +1900,7 @@ function startLevel(n, resetRun = false) {
   renderWeaponBar();
   updateWeaponChip();
   updateHud(true);
+  GP.gameStart();
 }
 
 function startEndless() {
@@ -1494,8 +1914,9 @@ function startEndless() {
   for (let i = 0; i < 6; i++) spawnFly();
   renderWeaponBar();
   updateWeaponChip();
-  dom.levelName.textContent = '無盡狂暴模式 · ENDLESS';
+  dom.levelName.textContent = t('endlessTitle');
   updateHud(true);
+  GP.gameStart();
 }
 
 function resetRound() {
@@ -1507,6 +1928,7 @@ function resetRound() {
   state.combo = 0;
   state.bestCombo = 0;
   state.comboT = 0;
+  state.revived = false;
   state.weaponLockT = 0;
   state.timeLeft = state.levelConfig.time;
   state.cool = 0;
@@ -1520,6 +1942,7 @@ function resetRound() {
   state.wind = null;
   state.gustT = 0;
   state.spawnTimer = 0;
+  state.endlessEntryAt = null;
   state.lastResult = null;
   dom.modal.classList.add('hidden');
   dom.bossWrap.classList.remove('on', 'defend');
@@ -1573,6 +1996,7 @@ function pickWeighted(types) {
 }
 
 function update(dt) {
+  if (state.paused) return;
   timeAlive += dt;
   if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 40);
   updateEffects(dt);
@@ -1595,7 +2019,7 @@ function update(dt) {
       if (state.gustT <= 0) {
         state.gustT = cfg.gustEvery;
         state.wind = { dir: Math.random() < 0.5 ? -1 : 1, t: 1.3, strength: 260 };
-        showToast('突風颳起！');
+        showToast(t('gust'));
         Sfx.spray();
       }
     }
@@ -1621,7 +2045,7 @@ function update(dt) {
       state.miniBossT = 60;
       const mb = new Fly('miniboss', { x: W / 2, y: H * 0.28 });
       pushFly(mb);
-      showToast('迷你蠅王出現！');
+      showToast(t('miniBoss'));
     }
   }
 
@@ -1634,7 +2058,7 @@ function update(dt) {
     state.boss.shieldCount = state.flies.filter((f) => f.shield && !f.dead && f.state !== 'dying').length;
     if (state.boss.phase === 2 && !state.boss.phaseAnnounced) {
       state.boss.phaseAnnounced = true;
-      showToast('蠅王狂暴！速度 ×1.5');
+      showToast(t('rage'));
       state.shake = 8;
       Sfx.buzz();
     }
@@ -1654,7 +2078,7 @@ function update(dt) {
   if (state.defend && state.boss === null) {
     const eaters = state.flies.filter((f) => f.eating && !f.dead && f.state !== 'dying').length;
     if (eaters > 0) state.defend.hp = Math.max(0, state.defend.hp - LEVELS[3].drainPerSec * eaters * dt);
-    if (state.defend.hp <= 0) return loseLevel('可頌被吃光了');
+    if (state.defend.hp <= 0) return loseLevel(t('lostCroissant'));
   }
 
   // 噴霧毒霧（每 0.3 秒結算一次）
@@ -1701,15 +2125,15 @@ function update(dt) {
 function checkGoal() {
   if (state.phase !== 'playing') return;
   const cfg = state.levelConfig;
-  if (cfg.goal.maxMisses !== undefined && state.misses > cfg.goal.maxMisses) return loseLevel('空拍次數過多');
-  if (cfg.goal.maxBeeHits !== undefined && state.beeHits > cfg.goal.maxBeeHits) return loseLevel('誤擊蜜蜂太多次');
+  if (cfg.goal.maxMisses !== undefined && state.misses > cfg.goal.maxMisses) return loseLevel(t('tooManyMisses'));
+  if (cfg.goal.maxBeeHits !== undefined && state.beeHits > cfg.goal.maxBeeHits) return loseLevel(t('tooManyBees'));
   if (cfg.goal.type === 'score' && state.levelScore >= cfg.goal.target) return winLevel();
   if (cfg.goal.type === 'kills' && state.kills >= cfg.goal.target) return winLevel();
   if (cfg.goal.type === 'boss' && !state.boss) return winLevel();
   if (cfg.goal.type === 'defend' && state.timeLeft <= 0 && state.defend.hp > 0) return winLevel();
   if (state.timeLeft <= 0) {
     state.timeLeft = 0;
-    return loseLevel('時間到');
+    return loseLevel(t('timeUp'));
   }
 }
 
@@ -1718,6 +2142,7 @@ function winLevel(playSound = true) {
   state.phase = 'won';
   if (playSound) Sfx.win();
   saveProgress(state.level);
+  GP.moment('happyMoment', state.level >= 5 ? 'boss_defeated' : 'level_complete');
   showResult(true);
 }
 
@@ -1725,6 +2150,7 @@ function loseLevel(reason) {
   if (state.phase !== 'playing') return;
   state.phase = 'lost';
   Sfx.lose();
+  GP.moment('sadMoment', 'level_failed');
   showResult(false, reason);
 }
 
@@ -1732,8 +2158,11 @@ function finishEndless() {
   if (state.phase !== 'playing') return;
   state.phase = 'lost';
   Sfx.lose();
-  const board = saveBoard({ survival: Math.round(state.survival), combo: state.bestCombo, at: Date.now() });
-  showResult(false, `容錯用完（${state.misses} 次空拍）`, board);
+  GP.moment('sadMoment', 'game_over');
+  const entry = { survival: Math.round(state.survival), combo: state.bestCombo, at: Date.now() };
+  const board = saveBoard(entry);
+  state.endlessEntryAt = entry.at;      // 若玩家看廣告續命，要把這筆排行收回
+  showResult(false, t('endlessOver', { n: state.misses }), board);
 }
 
 /* ==================================================================== *
@@ -1742,62 +2171,63 @@ function finishEndless() {
 function updateHud(force = false) {
   const cfg = state.levelConfig;
   if (!cfg) return;
-  const t = state.endless ? state.survival.toFixed(1) : Math.max(0, state.timeLeft).toFixed(1);
-  if (force || t !== state.hud.timer) {
-    dom.timer.textContent = t;
+  const timerTxt = state.endless ? state.survival.toFixed(1) : Math.max(0, state.timeLeft).toFixed(1);
+  if (force || timerTxt !== state.hud.timer) {
+    dom.timer.textContent = timerTxt;
     dom.timer.classList.toggle('low', !state.endless && state.timeLeft <= 10 && state.phase === 'playing');
-    state.hud.timer = t;
+    state.hud.timer = timerTxt;
   }
   const scoreTxt = String(state.score);
   if (force || scoreTxt !== state.hud.score) {
-    dom.score.innerHTML = `${scoreTxt}<small>分</small>`;
+    dom.score.innerHTML = `${scoreTxt}<small>${t('scoreUnit')}</small>`;
     state.hud.score = scoreTxt;
   }
   let prog = 0, label = '';
   if (cfg.goal.type === 'score') {
     prog = clamp(state.levelScore / cfg.goal.target, 0, 1);
-    label = `${state.levelScore} / ${cfg.goal.target} 分`;
+    label = t('goalScore', { a: state.levelScore, b: cfg.goal.target });
   } else if (cfg.goal.type === 'kills') {
     prog = clamp(state.kills / cfg.goal.target, 0, 1);
-    label = `${state.kills} / ${cfg.goal.target} 隻` +
-      (cfg.goal.maxMisses !== undefined ? ` · 空拍 ${state.misses}/${cfg.goal.maxMisses}` : '') +
-      (cfg.goal.maxBeeHits !== undefined ? ` · 蜜蜂 ${state.beeHits}/${cfg.goal.maxBeeHits}` : '');
+    label = t('goalKills', { a: state.kills, b: cfg.goal.target }) +
+      (cfg.goal.maxMisses !== undefined ? t('goalMisses', { a: state.misses, b: cfg.goal.maxMisses }) : '') +
+      (cfg.goal.maxBeeHits !== undefined ? t('goalBees', { a: state.beeHits, b: cfg.goal.maxBeeHits }) : '');
   } else if (cfg.goal.type === 'defend') {
     const hp = state.defend ? Math.ceil(state.defend.hp) : 0;
     prog = state.defend ? 1 - state.defend.hp / state.defend.maxHp : 0;
-    label = `衛生度 ${hp} / 100`;
+    label = t('goalHygiene', { hp });
     dom.bossWrap.classList.add('on', 'defend');
-    dom.bossName.textContent = '草莓可頌 · 衛生度';
+    dom.bossName.textContent = t('hygieneName');
     dom.bossBar.style.width = `${hp}%`;
   } else if (cfg.goal.type === 'boss') {
     const b = state.flies.find((f) => f.isBoss && !f.isMiniBoss);
     const hp = b ? b.hp : 0;
     prog = 1 - hp / FLY_TYPES.boss.hp;
-    label = b ? `蠅王 ${Math.ceil(hp)} / ${FLY_TYPES.boss.hp}${b.shieldCount > 0 ? ' · 護盾中' : ''}` : '蠅王已倒下';
+    label = b ? t('bossHp', { hp: Math.ceil(hp), max: FLY_TYPES.boss.hp }) + (b.shieldCount > 0 ? t('bossShielded') : '') : t('bossDown');
     dom.bossWrap.classList.add('on');
+    dom.bossName.textContent = t('bossName');
     dom.bossBar.style.width = `${clamp((hp / FLY_TYPES.boss.hp) * 100, 0, 100)}%`;
   } else {
     prog = clamp(state.survival / 300, 0, 1);
-    label = `存活 ${Math.floor(state.survival)} 秒 · 容錯 ${Math.max(0, 20 - state.misses)} · Combo ${state.bestCombo}`;
+    label = t('survival', { s: Math.floor(state.survival), m: Math.max(0, 20 - state.misses), c: state.bestCombo });
   }
   if (force || label !== state.hud.prog) {
     dom.progressBar.style.width = `${(prog * 100).toFixed(1)}%`;
     dom.progressText.textContent = label;
     state.hud.prog = label;
   }
-  const comboTxt = state.combo >= 3 ? `COMBO ×${state.combo}` : '';
+  const comboTxt = state.combo >= 3 ? t('combo', { n: state.combo }) : '';
   if (force || comboTxt !== state.hud.combo) {
     dom.combo.textContent = comboTxt;
     dom.combo.classList.toggle('show', !!comboTxt);
     state.hud.combo = comboTxt;
   }
-  if (force) dom.levelName.textContent = state.endless ? '無盡狂暴模式 · ENDLESS' : `第 ${state.level} 關 · ${cfg.name}`;
+  if (force) dom.levelName.textContent = state.endless ? t('endlessTitle') : t('levelN', { n: state.level, name: lvName(state.level) });
 }
 
 function updateWeaponChip() {
   const w = currentWeapon();
   dom.weaponIcon.textContent = w.icon;
-  dom.weaponName.textContent = w.name;
+  dom.weaponName.textContent = wName(w);
 }
 
 function renderWeaponBar() {
@@ -1807,7 +2237,7 @@ function renderWeaponBar() {
     const locked = i >= state.unlocked;
     b.className = `wbtn${i === state.weaponIndex ? ' active' : ''}${locked ? ' locked' : ''}`;
     b.dataset.weapon = w.id;
-    b.innerHTML = `<span class="ico">${locked ? '🔒' : w.icon}</span>${locked ? w.unlock : w.short}`;
+    b.innerHTML = `<span class="ico">${locked ? '🔒' : w.icon}</span>${locked ? w.unlock : wShort(w)}`;
     if (!locked) b.addEventListener('pointerdown', (e) => { e.stopPropagation(); selectWeapon(i); });
     dom.weaponbar.appendChild(b);
   });
@@ -1824,50 +2254,100 @@ function showResult(win, reason, board) {
   const cfg = state.levelConfig;
   const last = !state.endless && state.level >= 5;
   const stats = win
-    ? `<div><span>本關得分</span><b>${state.levelScore}</b></div>
-       <div><span>累積分數</span><b>${state.score}</b></div>
-       <div><span>空拍</span><b>${state.misses}</b></div>
-       ${cfg.goal.type === 'defend' ? `<div><span>剩餘衛生度</span><b>${Math.ceil(state.defend.hp)}</b></div>` : ''}`
-    : `<div><span>${state.endless ? '存活時間' : '失敗原因'}</span><b>${state.endless ? Math.round(state.survival) + ' 秒' : (reason || '未達目標')}</b></div>
-       <div><span>本關得分</span><b>${state.levelScore}</b></div>
-       <div><span>最高 Combo</span><b>${state.bestCombo}</b></div>`;
+    ? `<div><span>${t('thisRun')}</span><b>${state.levelScore}</b></div>
+       <div><span>${t('totalScore')}</span><b>${state.score}</b></div>
+       <div><span>${t('missesLabel')}</span><b>${state.misses}</b></div>
+       ${cfg.goal.type === 'defend' ? `<div><span>${t('hygieneLeft')}</span><b>${Math.ceil(state.defend.hp)}</b></div>` : ''}`
+    : `<div><span>${state.endless ? t('survived') : t('reasonLabel')}</span><b>${state.endless ? t('secondsShort', { n: Math.round(state.survival) }) : (reason || t('notReached'))}</b></div>
+       <div><span>${t('thisRun')}</span><b>${state.levelScore}</b></div>
+       <div><span>${t('bestCombo')}</span><b>${state.bestCombo}</b></div>`;
 
-  const boardHtml = board && board.length
-    ? `<div class="board"><div class="bt">🏆 無盡模式排行</div>${board.map((b, i) =>
-        `<div><span>#${i + 1}</span><b>${b.survival} 秒 · Combo ${b.combo}</b></div>`).join('')}</div>`
+  const boardHtml = (board && board.length)
+    ? `<div class="board"><div class="bt">${t('boardTitle')}</div>${board.map((b, i) =>
+        `<div><b>${t('boardRow', { i: i + 1, s: b.survival, c: b.combo })}</b></div>`).join('')}</div>`
     : '';
 
   const nextBtn = (!state.endless && win && !last)
-    ? '<button id="btnNext" class="primary">下一關 →</button>'
-    : (last ? '<button id="btnEndless" class="primary">進入無盡模式 →</button>'
-       : (state.endless ? '<button id="btnEndless" class="primary">再挑戰無盡</button>' : ''));
+    ? `<button id="btnNext" class="primary">${t('nextLevel')}</button>`
+    : (last && win ? `<button id="btnEndless" class="primary">${t('enterEndless')}</button>`
+      : (state.endless ? `<button id="btnEndless" class="primary">${t('againEndless')}</button>` : ''));
+  const reviveLabel = t(state.endless ? 'reviveEndless' : 'revive');
+  const reviveBtn = (!win && !state.revived)
+    ? `<button id="btnRevive" class="reward">▶ ${reviveLabel}</button>` : '';
 
   dom.card.innerHTML = `
-    <h2>${win ? (last ? '🎉 全部關卡通關！' : '✅ 本關達成') : (state.endless ? '🏁 無盡模式結束' : '💥 挑戰失敗')}</h2>
-    <p>${state.endless ? '無盡狂暴模式' : `第 ${state.level} 關 · ${cfg.name}`}</p>
+    <h2>${win ? (last ? t('winAll') : t('winLevel')) : (state.endless ? t('endlessEnd') : t('loseTitle'))}</h2>
+    <p>${state.endless ? t('endlessCard') : t('levelN', { n: state.level, name: lvName(state.level) })}</p>
     <div class="stats">${stats}</div>
     ${boardHtml}
     <div class="btns">
-      <button id="btnRetry">重新挑戰</button>
+      ${reviveBtn}
+      <button id="btnRetry">${t('retry')}</button>
       ${nextBtn}
-      <button id="btnMenu">選關</button>
+      <button id="btnMenu">${t('levels')}</button>
     </div>
-    <div class="hint">${cfg.tip}</div>`;
+    <div class="hint">${lvTip(state.endless ? 'endless' : state.level)}</div>`;
   dom.modal.classList.remove('hidden');
-  document.getElementById('btnRetry').onclick = () => {
+
+  /* 插頁廣告只放在關卡之間（規則：不得在遊戲中或計時觸發）；
+     廣告期間把結算按鈕全部鎖住，避免玩家在 Player 蓋層下誤觸兩次 */
+  const lockBtns = (v) => dom.card.querySelectorAll('.btns button').forEach((b) => { b.disabled = v; });
+  const afterAd = (fn) => {
+    lockBtns(true);
     Sfx.init();
-    if (state.endless) startEndless(); else startLevel(state.level);
+    GP.interstitial().then(() => { lockBtns(false); fn(); });
   };
+  document.getElementById('btnRetry').onclick = () => afterAd(() => {
+    if (state.endless) startEndless(); else startLevel(state.level);
+  });
   const next = document.getElementById('btnNext');
-  if (next) next.onclick = () => { Sfx.init(); startLevel(state.level + 1); };
+  if (next) next.onclick = () => afterAd(() => startLevel(state.level + 1));
   const endless = document.getElementById('btnEndless');
-  if (endless) endless.onclick = () => { Sfx.init(); startEndless(); };
+  if (endless) endless.onclick = () => afterAd(() => startEndless());
   document.getElementById('btnMenu').onclick = () => { Sfx.init(); showStart(); };
+
+  /* 獎勵廣告復活：玩家主動點、可跳過（其他按鈕照常可用），每局一次 */
+  const revive = document.getElementById('btnRevive');
+  if (revive) revive.onclick = () => {
+    if (revive.disabled) return;
+    lockBtns(true);
+    revive.textContent = t('reviving');
+    Sfx.init();
+    GP.reward().then((res) => {
+      if (res && res.success) { reviveRun(); return; }
+      lockBtns(false);
+      showToast(t('reviveFailed'));
+      revive.textContent = '▶ ' + reviveLabel;
+    });
+  };
+}
+
+function reviveRun() {
+  if (state.revived) return;
+  state.revived = true;
+  dom.modal.classList.add('hidden');
+  state.phase = 'playing';
+  state.pointer.down = false;
+  state.misses = 0;
+  state.beeHits = 0;
+  state.weaponLockT = 0;
+  if (state.endless) {
+    // 續命：這一局還沒結束，把剛才寫入的排行收回，避免一局兩筆
+    removeBoardEntry(state.endlessEntryAt);
+    state.endlessEntryAt = null;
+    showToast(t('revivedEndless'));
+  } else {
+    state.timeLeft = Math.max(0, state.timeLeft) + 15;
+    if (state.defend) state.defend.hp = Math.max(state.defend.hp, 50);
+    showToast(t('revived'));
+  }
+  updateHud(true);
 }
 
 function showStart() {
   state.phase = 'menu';
   state.endless = false;
+  state.paused = false;
   dom.bossWrap.classList.remove('on', 'defend');
   dom.combo.classList.remove('show');
   const prog = loadProgress();
@@ -1875,23 +2355,23 @@ function showStart() {
     const unlocked = levelUnlocked(+n);
     const cleared = !!prog[n];
     return `<button class="lv${unlocked ? '' : ' locked'}" data-level="${n}" ${unlocked ? '' : 'disabled'}>
-      <b>${cleared ? '★' : (unlocked ? '▶' : '🔒')} 第 ${n} 關</b><span>${cfg.name}</span></button>`;
+      <b>${cleared ? t('levelCleared') : (unlocked ? '▶' : t('locked'))} ${t('levelShort', { n })}</b><span>${lvName(+n)}</span></button>`;
   }).join('');
   const board = loadBoard();
   const boardHtml = board.length
-    ? `<div class="board"><div class="bt">🏆 無盡模式最佳</div>${board.slice(0, 3).map((b, i) =>
-        `<div><span>#${i + 1}</span><b>${b.survival} 秒 · Combo ${b.combo}</b></div>`).join('')}</div>` : '';
+    ? `<div class="board"><div class="bt">${t('boardTitle')}</div>${board.slice(0, 3).map((b, i) =>
+        `<div><b>${t('boardRow', { i: i + 1, s: b.survival, c: b.combo })}</b></div>`).join('')}</div>` : '';
 
   dom.card.innerHTML = `
-    <h1>打擊蒼蠅大作戰</h1>
+    <h1>${t('gameTitle')}</h1>
     <div class="sub">V4 · FLY SWAT RAMPAGE</div>
-    <p>8 把武器 · 5 個關卡 · 無盡模式</p>
+    <p>${t('tagline')}</p>
     <div class="levels">${chips}</div>
     <button class="lv endless${endlessUnlocked() ? '' : ' locked'}" id="btnEndlessMenu" ${endlessUnlocked() ? '' : 'disabled'}>
-      <b>${endlessUnlocked() ? '♾ 無盡狂暴模式' : '🔒 無盡（通關第 5 關解鎖）'}</b><span>容錯 20、每 60 秒迷你王</span></button>
+      <b>${endlessUnlocked() ? t('endlessCard') : t('endlessLocked')}</b><span>${t('endlessSub')}</span></button>
     ${boardHtml}
-    <div class="btns"><button id="btnStart" class="primary">從第 1 關開始</button></div>
-    <div class="hint">點擊／輕觸拍打 · 長按噴霧 · 底部可切換已解鎖武器</div>`;
+    <div class="btns"><button id="btnStart" class="primary">${t('startFrom1')}</button></div>
+    <div class="hint">${t('playHint')}</div>`;
   dom.modal.classList.remove('hidden');
   document.getElementById('btnStart').onclick = () => { Sfx.init(); startLevel(1, true); };
   document.getElementById('btnEndlessMenu').onclick = () => { Sfx.init(); startEndless(); };
@@ -1943,7 +2423,10 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 120));
-document.addEventListener('visibilitychange', () => { if (document.hidden) state.pointer.down = false; });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { state.pointer.down = false; GP.pause('visibility'); }
+  else GP.resume('visibility');
+});
 
 /* ==================================================================== *
  * 13. 繪製
@@ -2038,10 +2521,27 @@ function loop(now) {
  * ==================================================================== */
 resize();
 Sfx.loadPref();
+document.documentElement.lang = LANG === 'zh' ? 'zh-Hant' : 'en';
+document.title = LANG === 'zh' ? '打擊蒼蠅大作戰 V4 · Fly Swat Rampage' : 'Fly Swat Rampage V4';
+const loadingSub = document.getElementById('loadingSub');
+if (loadingSub) loadingSub.textContent = LANG === 'zh' ? '打擊蒼蠅大作戰' : 'SWAT OR BE SWARMED';
+dom.levelName.textContent = t('levelN', { n: 1, name: lvName(1) });
+dom.score.innerHTML = `0<small>${t('scoreUnit')}</small>`;
+// 還原累積分數 → 依門檻回推已解鎖武器（不觸發升級 toast）
+state.score = loadScore();
+state.unlocked = unlockedFromScore(state.score);
+state.weaponIndex = state.unlocked - 1;
 renderWeaponBar();
 updateWeaponChip();
 showStart();
+GP.init();
+GP.loading(60);
 requestAnimationFrame(loop);
+// 首兩帧畫完才算「可顯示」，再通知 GamePix Player 收 loading bar
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  GP.loading(100);
+  GP.loaded().then(() => GP.hideLoading());
+}));
 
 window.__game = {
   get ready() { return true; },
@@ -2076,13 +2576,22 @@ window.__game = {
   forceGust: () => { state.wind = { dir: 1, t: 1.3, strength: 260 }; state.gustT = LEVELS[4].gustEvery; },
   forcePhase2: () => { const b = state.flies.find((f) => f.isBoss && !f.isMiniBoss); if (b) b.hp = Math.floor(b.maxHp * 0.4); },
   setTimeLeft: (v) => { state.timeLeft = v; },
+  loseLevel,
   attack,
   viewport: () => ({ w: W, h: H, dpr: DPR }),
   currentWeapon,
   audio: Sfx,
   voice: Voice,
+  gp: GP,
+  lang: LANG,
+  reviveRun,
   saveProgress,
   clearEndlessBoard: () => { try { localStorage.removeItem(BOARD_KEY); } catch (e) { /* ignore */ } },
+  clearScore: () => {
+    try { localStorage.removeItem(SCORE_KEY); } catch (e) { /* ignore */ }
+    state.score = 0; state.unlocked = 1; state.weaponIndex = 0;
+    renderWeaponBar(); updateWeaponChip();
+  },
 };
 
 </script>

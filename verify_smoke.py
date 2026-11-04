@@ -3,7 +3,10 @@
 
 涵蓋：8 把武器（含黏蠅紙定身易傷、鹽槍扇心暴擊、電蚊拍連鎖、雙持雙點、雷射穿透）、
 第 3 關防禦（可頌衛生度）、第 4 關蜜蜂懲罰與突風、第 5 關 Boss 二階段/護盾/力竭、
-無盡模式（存活、迷你王、排行）、V3 音效與人聲、手機直向版面。
+無盡模式（存活、迷你王、排行）、V3 音效與人聲、武器解鎖持久化、手機直向版面。
+
+時間判定一律用 wait_for_function 等狀態，不用固定 sleep：
+headless + SwiftShader 前 1–2 秒只有 1–2 fps，睡眠會量到暖機或舊座標。
 
     python verify_smoke.py [--base-url URL] [--headed]
 """
@@ -30,6 +33,16 @@ def check(label: str, ok: bool, detail: str = "") -> bool:
     if not ok:
         FAILS.append(label)
     return ok
+
+
+def wait_frames(page, n: int = 10, timeout: int = 15_000) -> None:
+    """等 rAF 暖機。
+
+    headless + SwiftShader 在前 1–2 秒只跑得到 1–2 fps（著色器/首繪編譯），
+    直接量「1 秒內幾帧」會量到暖機而不是實際效能。先確認主循環已推進 n 帧再量。
+    """
+    start = page.evaluate("__game.frame")
+    page.wait_for_function(f"__game.frame >= {start + n}", timeout=timeout)
 
 
 def serve(directory: Path, port: int) -> socketserver.TCPServer:
@@ -82,10 +95,11 @@ def main() -> int:
         vp = page.evaluate("({w: innerWidth, h: innerHeight, dpr: devicePixelRatio, cw: game.width, ch: game.height, touch: getComputedStyle(document.body).touchAction})")
         check("canvas 依 DPR 滿版", vp["cw"] == int(vp["w"] * min(vp["dpr"], 2)) and vp["ch"] == int(vp["h"] * min(vp["dpr"], 2)), str(vp))
         check("阻擋預設觸控手勢", vp["touch"] == "none")
+        wait_frames(page, 10)          # 先暖機，避免把首繪編譯時間當成 fps
         f0 = page.evaluate("__game.frame")
         time.sleep(1.0)
         f1 = page.evaluate("__game.frame")
-        check("主循環持續推進", f1 - f0 >= 8, f"{f0} -> {f1} fps-ish")
+        check("主循環持續推進（暖機後）", f1 - f0 >= 8, f"{f0} -> {f1} fps-ish")
 
         # ---------- 2. 選關畫面 ----------
         menu = page.evaluate("""({
@@ -200,13 +214,27 @@ def main() -> int:
         check("4500 分 → 殺蟲噴霧", page.evaluate("__game.weapon") == "spray")
         clear()
         sx, sy = 210, 470
-        page.evaluate(f"__game.spawnFly({sx}, {sy}, 'bottle').state = 'rest'")
+        # 追蹤「這一隻」而不是 flies[0]：目標死後會被 filter 掉，索引就換人了
+        page.evaluate(f"""(() => {{
+          const f = __game.spawnFly({sx}, {sy}, 'bottle');
+          f.__probe = true;
+          f.state = 'rest'; f.restT = 9;      // 停在原地，不會自己飛出毒霧
+        }})()""")
         page.mouse.move(sx, sy)
         page.mouse.down()
-        time.sleep(1.3)
-        spray = page.evaluate("({clouds: __game.clouds.length, hp: (__game.flies[0] || {hp: -1}).hp})")
+        page.wait_for_function("__game.clouds.length >= 1", timeout=5_000)
+        killed = True
+        try:
+            page.wait_for_function(
+                "(() => { const f = __game.flies.find(f => f.__probe);"
+                " return !f || f.hp <= 0 || f.state === 'dying'; })()",
+                timeout=5_000)
+        except Exception:
+            killed = False
+        spray = page.evaluate("({clouds: __game.clouds.length,"
+                              " hp: (__game.flies.find(f => f.__probe) || {hp: 0}).hp})")
         page.mouse.up()
-        check("噴霧：毒霧每 0.3 秒結算、2HP 被打死", spray["clouds"] >= 1 and spray["hp"] <= 0, str(spray))
+        check("噴霧：毒霧每 0.3 秒結算、2HP 被打死", killed and spray["clouds"] >= 1, str(spray))
 
         set_score(6500)
         check("6500 分 → 雙持高壓電蚊拍", page.evaluate("__game.weapon") == "twin")
@@ -242,12 +270,20 @@ def main() -> int:
           const f = __game.spawnFly(t.x, t.y, 'house');
           return {target: !!f.targetPos};
         })()""")
-        time.sleep(1.0)
+        eaten = True
+        try:
+            page.wait_for_function("__game.defend.hp < 100 && __game.flies.some(f => f.eating)", timeout=5_000)
+        except Exception:
+            eaten = False
         d1 = page.evaluate("({hp: __game.defend.hp, eating: __game.flies.some(f => f.eating)})")
-        check("蒼蠅抵達可頌後進入 eating 並扣衛生度", eat["target"] and d1["eating"] and d1["hp"] < 100, str(d1))
+        check("蒼蠅抵達可頌後進入 eating 並扣衛生度", eat["target"] and eaten, str(d1))
         page.evaluate("__game.setTimeLeft(0.05)")
-        time.sleep(0.4)
-        check("守住 60 秒 → 第 3 關通關", page.evaluate("__game.state.phase") == "won")
+        won3 = True
+        try:
+            page.wait_for_function("__game.state.phase === 'won'", timeout=5_000)
+        except Exception:
+            won3 = False
+        check("守住 60 秒 → 第 3 關通關", won3, f"phase={page.evaluate('__game.state.phase')}")
 
         # ---------- 6. 第 4 關：蜜蜂懲罰 + 突風 ----------
         goto_level(4)
@@ -330,9 +366,15 @@ def main() -> int:
           __game.flies.filter(f => f.shield).forEach(f => { f.dead = true; });
           __game.attack(innerWidth / 2, b.y);
         })()""")
-        time.sleep(0.8)
+        won5 = True
+        try:
+            page.wait_for_function("__game.state.phase === 'won'", timeout=5_000)
+            # 人聲是 bossDown 後 320ms 才排進去的，不能一看到 won 就讀 log
+            page.wait_for_function("__game.voice.log.some(e => e.name === 'voice:boss')", timeout=5_000)
+        except Exception:
+            won5 = False
         win5 = page.evaluate("({phase: __game.state.phase, progress: __game.progress, voices: __game.voice.log.map(e => e.name)})")
-        check("Boss 倒下 → 通關並存進度（解鎖無盡）", win5["phase"] == "won" and win5["progress"].get("5") is True, str(win5["progress"]))
+        check("Boss 倒下 → 通關並存進度（解鎖無盡）", won5 and win5["progress"].get("5") is True, str(win5["progress"]))
         check("擊倒蠅王有人聲「你有病喔」", "voice:boss" in win5["voices"], str(win5["voices"][-3:]))
 
         # ---------- 8. 無盡模式 ----------
@@ -345,13 +387,21 @@ def main() -> int:
         e0 = page.evaluate("({phase: __game.state.phase, endless: __game.state.endless, survival: __game.state.survival, label: document.getElementById('levelName').textContent})")
         check("無盡模式啟動（無時間上限、存活計時）", e0["phase"] == "playing" and e0["endless"] and e0["survival"] > 0, str(e0))
         page.evaluate("__game.state.miniBossT = 0.05")
-        time.sleep(0.5)
+        mini_ok = True
+        try:
+            page.wait_for_function("__game.flies.some(f => f.isMiniBoss)", timeout=5_000)
+        except Exception:
+            mini_ok = False
         mini = page.evaluate("__game.flies.filter(f => f.isMiniBoss).length")
-        check("每 60 秒的迷你蠅王會出現", mini >= 1, f"miniboss={mini}")
+        check("每 60 秒的迷你蠅王會出現", mini_ok and mini >= 1, f"miniboss={mini}")
         page.evaluate("__game.state.misses = 21")
-        time.sleep(0.4)
+        ended = True
+        try:
+            page.wait_for_function("__game.state.phase === 'lost'", timeout=5_000)
+        except Exception:
+            ended = False
         end = page.evaluate("({phase: __game.state.phase, board: __game.board})")
-        check("容錯用完 → 結束並寫入排行", end["phase"] == "lost" and len(end["board"]) == 1, str(end["board"]))
+        check("容錯用完 → 結束並寫入排行", ended and len(end["board"]) == 1, str(end["board"]))
 
         # ---------- 9. 靜音 / 截圖 ----------
         # 關掉結算/選關遮罩（#modal 在靜音鈕上層），直接測右上角那顆按鈕
@@ -369,7 +419,111 @@ def main() -> int:
               m1["muted"] is True and m1["saved"] == "1" and not quiet["a"] and not quiet["v"], str(quiet))
         page.click("#muteBtn")
 
-        page.evaluate("__game.startLevel(1)")
+        # ---------- 9b. 武器解鎖持久化 ----------
+        page.evaluate("__game.addScore(9000 - __game.state.score)")   # 保證 8 把全開
+        before = page.evaluate("({score: __game.state.score, unlocked: __game.unlocked,"
+                               " stored: localStorage.getItem('fly.swat.score')})")
+        page.reload(wait_until="load")
+        page.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        wait_frames(page, 5)
+        after = page.evaluate("({score: __game.state.score, unlocked: __game.unlocked,"
+                              " weapon: __game.weapon,"
+                              " chips: document.querySelectorAll('.wbtn:not(.locked)').length})")
+        check("武器解鎖持久化：重新載入後仍保有 8 把",
+              before["unlocked"] == 8 and before["stored"] == "9000"
+              and after["unlocked"] == 8 and after["weapon"] == "laser"
+              and after["chips"] == 8 and after["score"] == 9000, f"{before} -> {after}")
+
+        page.evaluate("__game.startLevel(1, true)")
+        reset = page.evaluate("({score: __game.state.score, unlocked: __game.unlocked,"
+                              " stored: localStorage.getItem('fly.swat.score')})")
+        check("從第 1 關重新開始會重置累積分數與武器",
+              reset["score"] == 0 and reset["unlocked"] == 1 and reset["stored"] == "0", str(reset))
+
+        # ---------- 9c. GamePix SDK（生命週期／暫停／廣告／復活／無 SDK 退路） ----------
+        gp = page.evaluate("({enabled: __game.gp.enabled, log: __game.gp.log,"
+                           " hidden: document.getElementById('loading').classList.contains('hidden')})")
+        check("GamePix：manual lifecycle 回報載入完成、loading 畫面已收",
+              gp["enabled"] and "loaded" in gp["log"] and "loading:100" in gp["log"] and gp["hidden"],
+              str(gp["log"]))
+        check("GamePix：開始關卡會送 gameStart", "gameStart" in page.evaluate("__game.gp.log"))
+
+        zctx = browser.new_context(locale="zh-TW")
+        zp = zctx.new_page()
+        zp.goto(url, wait_until="load")
+        zp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        zh_h1 = zp.evaluate("document.querySelector('#card h1').textContent")
+        zh_chip = zp.evaluate("document.querySelector('.wbtn').textContent")
+        zh_lang = zp.evaluate("document.documentElement.lang")
+        zctx.close()
+        check("語系：中文系統顯示中文、其餘預設英文",
+              zh_h1 == "打擊蒼蠅大作戰" and "報紙" in zh_chip and zh_lang == "zh-Hant",
+              f"{zh_h1} / {zh_chip} / lang={zh_lang}")
+
+        # 用 stub 取代 Player，驗廣告流程（真 SDK 在 Player 外只會模擬）
+        page.evaluate("""(() => {
+          window.__gpStub = { ints: 0, rews: 0, rewOk: true };
+          window.GamePix = { ads: {
+            interstitial: () => { window.__gpStub.ints++; return Promise.resolve({ success: true }); },
+            reward: () => { window.__gpStub.rews++; return Promise.resolve({ success: window.__gpStub.rewOk }); },
+          }, events: { on() {} }, lang: () => 'en' };
+        })()""")
+
+        page.evaluate("__game.startLevel(2); __game.state.timeLeft = 30")
+        wait_frames(page, 5)
+        t0 = page.evaluate("(() => { const v = __game.state.timeLeft; __game.gp.pause('test'); return v; })()")
+        time.sleep(0.6)
+        t1 = page.evaluate("({tl: __game.state.timeLeft, paused: __game.state.paused})")
+        page.evaluate("__game.gp.resume('test')")
+        page.wait_for_function(f"__game.state.timeLeft < {t1['tl'] - 0.2}", timeout=5_000)
+        t2 = page.evaluate("__game.state.timeLeft")
+        check("暫停：時鐘與輸入停止、恢復後繼續",
+              t1["paused"] and abs(t1["tl"] - t0) < 0.001 and t2 < t1["tl"],
+              f"{t0} -> {t1['tl']} -> {t2}")
+
+        page.evaluate("__game.startLevel(1); __game.addScore(500 - __game.state.levelScore)")
+        page.wait_for_function("__game.state.phase === 'won'", timeout=5_000)
+        page.click("#btnNext")
+        page.wait_for_function("__game.state.phase === 'playing' && __game.state.level === 2", timeout=5_000)
+        ads = page.evaluate("({stub: window.__gpStub, calls: __game.gp.calls})")
+        check("插頁廣告：只在關卡之間播、播完才進下一關",
+              ads["stub"]["ints"] == 1 and any(c["kind"] == "interstitial" for c in ads["calls"]), str(ads))
+
+        page.evaluate("__game.startLevel(2); __game.loseLevel('probe')")
+        page.wait_for_selector("#btnRevive", timeout=5_000)
+        page.evaluate("window.__gpStub.rewOk = true")
+        page.click("#btnRevive")
+        page.wait_for_function("__game.state.phase === 'playing' && __game.state.revived === true", timeout=5_000)
+        rev = page.evaluate("({tl: __game.state.timeLeft, misses: __game.state.misses, calls: __game.gp.calls})")
+        check("獎勵廣告：復活 +15 秒、失誤歸零",
+              rev["tl"] > 0 and rev["misses"] == 0 and rev["calls"][-1]["kind"] == "reward", str(rev))
+        page.evaluate("__game.loseLevel('again')")
+        check("同一局只能復活一次", page.evaluate("__game.state.revived === true && !document.getElementById('btnRevive')"))
+
+        # 無盡模式續命：容錯歸零、把剛才寫入的排行收回、一局一次
+        page.evaluate("__game.clearEndlessBoard(); __game.startEndless();"
+                      " __game.state.survival = 42; __game.state.misses = 21")
+        page.wait_for_function("__game.state.phase === 'lost'", timeout=5_000)
+        ended = page.evaluate("({board: __game.board.length, revive: !!document.getElementById('btnRevive'),"
+                              " label: (document.getElementById('btnRevive') || {}).textContent})")
+        page.click("#btnRevive")
+        page.wait_for_function("__game.state.phase === 'playing' && __game.state.revived", timeout=5_000)
+        cont = page.evaluate("({misses: __game.state.misses, survival: __game.state.survival,"
+                             " board: __game.board.length})")
+        check("無盡續命：容錯歸零、收回當次排行、存活時間保留",
+              ended["board"] == 1 and ended["revive"] and "keep going" in (ended["label"] or "")
+              and cont["misses"] == 0 and cont["board"] == 0 and cont["survival"] >= 42,
+              f"{ended} -> {cont}")
+        page.evaluate("__game.state.survival = 55; __game.state.misses = 21")
+        page.wait_for_function("__game.state.phase === 'lost'", timeout=5_000)
+        check("無盡每局只能續命一次",
+              page.evaluate("__game.state.revived === true && !document.getElementById('btnRevive')"
+                            " && __game.board.length === 1"))
+
+        page.evaluate("window.GamePix = undefined")
+        fb = page.evaluate("__game.gp.interstitial()")
+        check("沒有 SDK 時廣告 no-op、不卡關", fb.get("success") is False, str(fb))
+
         time.sleep(0.8)
         page.screenshot(path=str(ART / "fly-v4-desktop.png"))
 
@@ -380,15 +534,48 @@ def main() -> int:
         mp.goto(url, wait_until="load")
         mp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
         mp.tap(".lv[data-level='1']")
-        time.sleep(0.7)
+        mp.wait_for_function("__game.state.phase === 'playing'", timeout=5_000)
         mv = mp.evaluate("({phase: __game.state.phase, chips: document.querySelectorAll('.wbtn').length, w: innerWidth, h: innerHeight})")
         check("手機（Pixel 5）：直向版面 + 8 武器列", mv["phase"] == "playing" and mv["chips"] == 8, str(mv))
-        target = mp.evaluate("(() => { const f = __game.spawnFly(innerWidth * .5, innerHeight * .45); return {x: f.x, y: f.y}; })()")
+        # 先定住再 tap：蒼蠅會飛，點在舊座標只會空拍
+        target = mp.evaluate("(() => { const f = __game.spawnFly(innerWidth * .5, innerHeight * .45);"
+                             " f.state = 'rest'; f.restT = 9;"
+                             " return {x: f.x, y: f.y}; })()")
         mp.touchscreen.tap(target["x"], target["y"])
-        time.sleep(0.3)
-        check("手機觸控拍打計分", mp.evaluate("__game.state.score") > 0, f"score={mp.evaluate('__game.state.score')}")
+        scored = True
+        try:
+            mp.wait_for_function("__game.state.score > 0", timeout=5_000)
+        except Exception:
+            scored = False
+        check("手機觸控拍打計分", scored, f"score={mp.evaluate('__game.state.score')}")
         mp.screenshot(path=str(ART / "fly-v4-mobile.png"))
         mctx.close()
+
+        # ---------- 10. 640×480 iframe（GamePix 最低要求） ----------
+        sctx = browser.new_context(viewport={"width": 640, "height": 480})
+        sp = sctx.new_page()
+        sp.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        sp.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+        sp.goto(url, wait_until="load")
+        sp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        fit = sp.evaluate("""({
+          scrollable: getComputedStyle(document.querySelector('#card')).overflowY,
+          cardTop: document.querySelector('#card').getBoundingClientRect().top,
+          cardBottom: document.querySelector('#card').getBoundingClientRect().bottom,
+          barBottom: document.querySelector('#weaponbar').getBoundingClientRect().bottom,
+          w: innerWidth, h: innerHeight,
+        })""")
+        sp.click(".lv[data-level='1']")
+        sp.wait_for_function("__game.state.phase === 'playing'", timeout=5_000)
+        play = sp.evaluate("({phase: __game.state.phase, chips: document.querySelectorAll('.wbtn').length,"
+                           " barTop: document.querySelector('#weaponbar').getBoundingClientRect().top, h: innerHeight})")
+        check("640×480 iframe：選單可捲動、可進關卡、武器列在畫面內",
+              fit["scrollable"] == "auto" and fit["cardTop"] >= -1 and fit["cardBottom"] <= fit["h"] + 1
+              and fit["barBottom"] <= fit["h"] + 1 and play["phase"] == "playing"
+              and play["chips"] == 8 and play["barTop"] < play["h"], f"{fit} -> {play}")
+        sp.wait_for_function("getComputedStyle(document.getElementById('modal')).opacity === '0'", timeout=3_000)
+        sp.screenshot(path=str(ART / "fly-v4-640x480.png"))
+        sctx.close()
 
         browser.close()
 
@@ -405,7 +592,7 @@ def main() -> int:
     if FAILS:
         print(f"RESULT: FAIL ({len(FAILS)}: {', '.join(FAILS)})")
         return 1
-    print("RESULT: PASS (8 武器 / 5 關 / 防禦 / 干擾 / Boss 二階段 / 無盡 / 音效人聲 / 手機)")
+    print("RESULT: PASS (8 武器 / 5 關 / 防禦 / 干擾 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / GamePix SDK / 手機 / 640×480)")
     return 0
 
 

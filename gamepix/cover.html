@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Fly Swat Rampage — cover</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0b0805; }
+  .bg {
+    position: absolute; inset: -60px;
+    background: url("assets/screenshots/02-action.png") center/cover no-repeat;
+    filter: blur(34px) saturate(1.15) brightness(.55); opacity: .55; transform: scale(1.1);
+  }
+  .shade {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, rgba(9, 6, 3, .98) 0%, rgba(9, 6, 3, .93) 34%, rgba(9, 6, 3, .45) 62%, rgba(9, 6, 3, .2) 100%),
+      radial-gradient(circle at 24% 30%, rgba(255, 150, 50, .22), transparent 52%),
+      linear-gradient(0deg, rgba(9, 6, 3, .75), transparent 45%);
+  }
+  .copy {
+    position: absolute; left: 104px; top: 132px; width: 980px;
+    font-family: "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  }
+  .kicker {
+    font-size: 24px; letter-spacing: .34em; color: #ffb347; font-weight: 700;
+    text-transform: uppercase; margin-bottom: 26px;
+  }
+  h1 {
+    margin: 0; font-family: "Arial Black", "Helvetica Neue", system-ui, sans-serif;
+    font-size: 150px; line-height: .93; letter-spacing: -.01em; text-transform: uppercase;
+    background: linear-gradient(180deg, #fff2d6 0%, #ffc46b 46%, #e9791f 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .65));
+  }
+  .sub { margin: 30px 0 0; font-size: 38px; color: #f0dcc0; letter-spacing: .04em; }
+  .sub b { color: #ffd08a; }
+  .chips { margin-top: 40px; display: flex; gap: 16px; font-size: 42px; }
+  .chips span {
+    width: 80px; height: 80px; display: grid; place-items: center;
+    background: rgba(26, 16, 8, .72); border: 2px solid rgba(255, 196, 107, .45);
+    border-radius: 20px; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55));
+  }
+  .phone {
+    position: absolute; right: 150px; top: 108px; width: 424px; height: 864px;
+    border-radius: 54px; padding: 12px; background: linear-gradient(180deg, #2a1c10, #120c07);
+    border: 2px solid rgba(255, 196, 107, .5);
+    box-shadow: 0 40px 90px rgba(0, 0, 0, .7), 0 0 90px rgba(255, 150, 50, .22);
+  }
+  .phone img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: 44px; display: block;
+  }
+  .phone::after {
+    content: ''; position: absolute; left: 50%; top: 22px; transform: translateX(-50%);
+    width: 106px; height: 8px; border-radius: 8px; background: rgba(0, 0, 0, .55);
+  }
+  .badge {
+    position: absolute; left: 104px; bottom: 96px; padding: 14px 26px; border-radius: 999px;
+    background: rgba(12, 8, 4, .72); border: 2px solid rgba(255, 196, 107, .55);
+    color: #ffe6bd; font: 700 24px/1 "Helvetica Neue", system-ui, sans-serif; letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+  .vignette { position: absolute; inset: 0; box-shadow: inset 0 0 240px 80px rgba(0,0,0,.5); }
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="shade"></div>
+  <div class="copy">
+    <div class="kicker">Arcade · Fly-Swatting Mayhem</div>
+    <h1>Fly Swat<br>Rampage</h1>
+    <div class="sub"><b>8</b> weapons · <b>5</b> levels · <b>Endless</b> mode</div>
+    <div class="chips"><span>📰</span><span>🏓</span><span>🪤</span><span>⚡</span><span>🧂</span><span>🧴</span><span>🔫</span></div>
+  </div>
+  <div class="phone"><img src="assets/screenshots/02-action.png" alt="" /></div>
+  <div class="badge">Swat or be swarmed</div>
+  <div class="vignette"></div>
+</body>
+</html>
