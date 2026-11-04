@@ -6,8 +6,15 @@
 - 遊戲本體：`index.html`（約 345 KB，零圖檔／零音檔，全部內嵌）
 - 上傳檔：`dist/fly-swat-rampage-gamepix.zip`（約 157 KB，ZIP 根目錄只有 `index.html`）
 - 素材：`gamepix/assets/`
-- 驗證：`python3 verify_smoke.py`（98 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
-- 送審設定：`LB_URL = ''`、`LB_ENABLED_DEFAULT = false`；全球榜後端在 `server/`，**不進 ZIP**，未啟用前沒有任何額外網路請求
+- 驗證：`python3 verify_smoke.py`（100 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
+- **送審設定（2026-11-05 更新，與實檔一致）**：
+  - **頁面版**（GitHub Pages `index.html`）：`LB_URL = 'https://fly-swat-lb.chenkaiting18.workers.dev'`、`LB_ENABLED_DEFAULT = false`
+    —— 這是給你本機／Pages 測全球榜用的，**不是**送審內容。
+  - **送審版**（`build_gamepix.py` 產生的 ZIP）：建包時自動把 `LB_URL` 清成 `''`，
+    ZIP 內**只剩 GamePix SDK 一個外部網址**，`LB_ENABLED_DEFAULT` 仍為 `false`
+    → **不需要向 GamePix 申報自家排行榜後端**，也不會有任何額外網路請求。
+  - 全球榜後端在 `server/`，**不進 ZIP**。日後若要開放全球榜，再另出一版保留 `LB_URL` 的包，
+    並先向 GamePix support 申報該 Worker host。
 
 ---
 
@@ -152,7 +159,7 @@ fly-swat-rampage-gamepix.zip
 | 獎勵廣告需明示、可跳過 | ✅ | 按鈕文字寫明「+15 秒、失誤歸零、每局一次」；其他按鈕可關閉 |
 | 載入畫面 | ✅ | `#loading`，`loaded()` 後淡出 |
 | 640×480 iframe 可玩 | ✅ | Playwright 實測（選單可捲動、可進關、武器列在畫面內） |
-| 無外部連結／外部分析／第三方 SDK | ✅ | 外部 URL 只有 GamePix SDK 與自家排行榜 API；全球榜預設關閉（`LB_ENABLED_DEFAULT=false`），未啟用前不發出任何請求；ZIP 不含 `server/` |
+| 無外部連結／外部分析／第三方 SDK | ✅ | **送審 ZIP 內外部 URL 只有 GamePix SDK 一個**（`build_gamepix.py` 建包時把 `LB_URL` 清空）；全球榜預設關閉（`LB_ENABLED_DEFAULT=false`）；ZIP 不含 `server/`，不需申報自家後端 |
 | 無 Quit 按鈕 | ✅ | 選單只有關卡與開始 |
 | 不得要求旋轉裝置 | ✅ | 無此提示；直向／橫向都可玩 |
 | 語言預設英文 | ✅ | 非 `zh*` 一律英文；`zh*` 顯示繁中 |
@@ -168,7 +175,7 @@ fly-swat-rampage-gamepix.zip
 
 ## 驗證記錄（本機實跑）
 
-- `python3 verify_smoke.py`：**98 / 98 PASS**，連跑 2 次；同一份 ZIP 解壓後再跑 1 次也 **98 / 98**。
+- `python3 verify_smoke.py`：**100 / 100 PASS**（2026-11-05 新增雨／霓虹 32 關與第 43 關回歸項）；同一份 ZIP 解壓後再跑 1 次也全 PASS。
 - 真 SDK（非 stub）本機模擬：
   - `?gpx_ad=success` → 過關按「下一關」播完後進第 2 關；`?gpx_ad=nofill` → 不播廣告仍進第 2 關（`{success:false}`）。
   - `?gpx_reward=success` → 關卡失敗後復活（`phase=playing`, `timeLeft=65`, `revived=true`）。
@@ -179,7 +186,7 @@ fly-swat-rampage-gamepix.zip
 ## 本機指令
 
 ```bash
-# 98 項 E2E（含 20 武器機制、100 關／100 場景、暱稱／PB／本機排行、全球榜 mock、語言切換、SDK／廣告、640×480）
+# 100 項 E2E（含 20 武器機制、100 關／100 場景、暱稱／PB／本機排行、全球榜 mock、語言切換、SDK／廣告、640×480）
 python3 verify_smoke.py
 
 # 打包並驗證 ZIP 結構
