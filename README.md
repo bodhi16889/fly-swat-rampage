@@ -1,10 +1,41 @@
-# 打擊蒼蠅大作戰 · Fly Swat Rampage — **V2（音效重整）**
+# 打擊蒼蠅大作戰 · Fly Swat Rampage — **V3（加入人聲）**
 
 手機 H5 單指觸控打蒼蠅遊戲。**單一 `index.html`、零依賴、Canvas 2D + Web Audio 即時合成音效**，
 直向滿版（`viewport-fit=cover` + `touch-action: none`），用手機瀏覽器打開就能玩。
 
 > 🌐 線上版：<https://bodhi16889.github.io/fly-swat-rampage/>
 > （另有 Three.js 3D 作品：[台北機甲拆除模擬器](https://bodhi16889.github.io/mech-taipei-h5/)）
+
+## V3 加了什麼（人聲）
+
+| 時機 | 台詞 | 規則 |
+| :--- | :--- | :--- |
+| 每次擊殺蒼蠅 | **「什麼意思」**（兩段語氣交替） | 320ms 限流：正常節奏下每隻都喊；電蚊拍／雷射「一瞬間多殺」只喊一次，避免疊成噪音 |
+| 擊倒蠅王 | **「你有病喔」** | 在 `bossDown` 低頻倒塌後 0.32 秒才喊，不與爆炸聲打架 |
+
+**人聲怎麼來的（不需要外錄、仍是單檔）**
+
+1. 用 Windows SAPI 台灣中文語音 `Microsoft Hanhan (zh-TW)` 合成 → 完整 WAV。
+2. Python 裁掉前後靜音、正規化音量（峰值 0.9）。
+3. base64 內嵌進 `index.html`，由 `AudioContext.decodeAudioData()` 播放（同一個 master/壓縮器，
+   所以靜音鈕 🔊/🔇 也管得到人聲）。
+4. 若某台裝置解不開內嵌音檔，會自動退回瀏覽器 `SpeechSynthesis`（`lang: zh-TW`）念同樣台詞。
+
+`index.html` 因此從約 51 KB 變成約 196 KB（人聲 141 KB base64）；沒有新增任何外部檔案，
+`file://` 直接開也有聲音。
+
+**想換台詞**（例如改喊別的字）：
+
+```powershell
+# 1) 用 SAPI 合成（可換 Microsoft Hanhan / Yating / Zhiwei）
+Add-Type -AssemblyName System.Speech
+$s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$s.SelectVoice('Microsoft Hanhan Desktop'); $s.Rate = 1
+$s.SetOutputToWaveFile("$env:LOCALAPPDATA\Temp\voicelines\kill_a.wav"); $s.Speak('什麼意思')
+```
+
+2) 重新產生 base64（裁靜音＋正規化＋**保留 WAV header**）後換掉 `index.html` 裡的 `VOICE_LINES`，
+   再跑 `python verify_smoke.py` 確認「人聲 3 段已解碼」仍為 PASS。
 
 ## V2 改了什麼（音效）
 
@@ -112,7 +143,10 @@ python verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/
 [PASS] 一次多殺的擊殺音有被限流（≤2 聲） — kill 音 2 聲 / 同時死 3 隻
 [PASS] Boss 倒下播放專屬音效（bossDown） — ['swing', 'hit', 'bossDown']
 [PASS] Boss 倒下不再疊關卡通關音（win）
-[PASS] 靜音鈕可關閉音效並記住設定 / 可再開啟
+[PASS] V3 人聲 3 段已解碼（內嵌 base64 有效） — buffers ['kill_a','boss','kill_b']
+[PASS] V3 每次擊殺會喊人聲（voice:kill） / 一次多殺的人聲只喊一次
+[PASS] V3 擊倒蠅王會喊「你有病喔」（voice:boss）
+[PASS] 靜音鈕可關閉音效並記住設定 / 靜音時人聲與音效都不播 / 可再開啟
 [PASS] 手機（Pixel 5）以觸控開始遊戲 / 手機觸控拍打命中有計分
 RESULT: PASS
 ```

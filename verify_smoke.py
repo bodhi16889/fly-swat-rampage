@@ -97,6 +97,15 @@ def main() -> int:
         check("開始遊戲 → 進入第 1 關", st["phase"] == "playing" and st["level"] == 1, str(st))
         check("場上已有蒼蠅", st["flies"] >= 5, f"flies={st['flies']}")
 
+        # V3：內嵌人聲（SAPI 合成）要能解碼，否則就是音檔壞了
+        decoded = True
+        try:
+            page.wait_for_function("Object.keys(__game.voice.buffers).length === 3", timeout=15_000)
+        except Exception:
+            decoded = False
+        vinfo = page.evaluate("({buffers: Object.keys(__game.voice.buffers), failed: __game.voice.decodeFailed})")
+        check("V3 人聲 3 段已解碼（內嵌 base64 有效）", decoded, str(vinfo))
+
         # ---------- 2. 蒼蠅行為（遊走 / 停歇） ----------
         pos0 = page.evaluate("(() => { const f = __game.flies[0]; return {x: f.x, y: f.y, state: f.state}; })()")
         time.sleep(1.0)
@@ -121,6 +130,8 @@ def main() -> int:
         check("V2 音效分層：swing + kill", "swing" in snd and "kill" in snd, str(snd))
         check("擊殺不會重播拍打聲（不再 slap）", "slap" not in snd, str(snd))
         check("單次擊殺只播一次 kill", snd.count("kill") == 1, str(snd))
+        vsnd = page.evaluate("__game.voice.log.map(e => e.name)")
+        check("V3 每次擊殺會喊人聲（voice:kill）", vsnd.count("voice:kill") == 1, str(vsnd))
 
         # 空拍：先清場再點空白處（避免剛好打到路過的蒼蠅）
         wait_cool(page)
@@ -147,6 +158,7 @@ def main() -> int:
         check("1500 分 → 電蚊拍", page.evaluate("__game.weapon") == "electric")
         ax, ay = center["w"] * 0.5, center["h"] * 0.6
         page.evaluate(f"__game.flies.length = 0; __game.effects.length = 0;"
+                      f" __game.voice.log.length = 0;"
                       f" __game.spawnFly({ax - 25}, {ay}); __game.spawnFly({ax + 30}, {ay + 18}); __game.spawnFly({ax}, {ay - 30});"
                       f" __game.state.cool = 0;")
         page.mouse.click(ax, ay)
@@ -155,6 +167,8 @@ def main() -> int:
         check("電蚊拍一次電死範圍內多隻（含電弧特效）", aoe["dead"] >= 3 and aoe["zaps"] >= 3, str(aoe))
         rapid = page.evaluate("__game.audio.log.filter(e => e.name === 'kill').length")
         check("一次多殺的擊殺音有被限流（≤2 聲）", 0 < rapid <= 2, f"kill 音 {rapid} 聲 / 同時死 {aoe['dead']} 隻")
+        vrapid = page.evaluate("__game.voice.log.filter(e => e.name === 'voice:kill').length")
+        check("一次多殺的人聲只喊一次（不疊音）", vrapid <= 1, f"voice:kill {vrapid} 聲 / 同時死 {aoe['dead']} 隻")
 
         # 噴霧：長按持續傷害
         page.evaluate("__game.addScore(2000)")   # 累積 3500
@@ -226,6 +240,9 @@ def main() -> int:
         bsnd = page.evaluate("__game.audio.log.map(e => e.name)")
         check("Boss 倒下播放專屬音效（bossDown）", bsnd.count("bossDown") == 1, str(bsnd))
         check("Boss 倒下不再疊關卡通關音（win）", bsnd.count("win") == 0, str(bsnd))
+        time.sleep(0.7)   # 人聲延後 0.32s 才喊
+        bvoice = page.evaluate("__game.voice.log.map(e => e.name)")
+        check("V3 擊倒蠅王會喊「你有病喔」（voice:boss）", bvoice.count("voice:boss") == 1, str(bvoice))
 
         # ---------- 7. 第 1 關達標 → 下一關按鈕 ----------
         page.evaluate("__game.startLevel(1)")
@@ -245,6 +262,12 @@ def main() -> int:
         time.sleep(0.15)
         muted = page.evaluate("({muted: __game.audio.muted, icon: document.getElementById('muteBtn').textContent, saved: localStorage.getItem('fly.swat.muted')})")
         check("靜音鈕可關閉音效並記住設定", muted["muted"] is True and muted["saved"] == "1", str(muted))
+        page.evaluate("__game.voice.log.length = 0; __game.audio.log.length = 0; __game.state.cool = 0")
+        mv = page.evaluate("({w: innerWidth, h: innerHeight})")
+        page.evaluate(f"__game.spawnFly({mv['w'] * 0.5}, {mv['h'] * 0.5}, 'house')")
+        page.mouse.click(mv["w"] * 0.5, mv["h"] * 0.5)
+        time.sleep(0.3)
+        check("靜音時人聲與音效都不播", page.evaluate("__game.voice.log.length === 0 && __game.audio.log.length === 0"))
         page.click("#muteBtn")
         time.sleep(0.15)
         unmuted = page.evaluate("({muted: __game.audio.muted, saved: localStorage.getItem('fly.swat.muted')})")
