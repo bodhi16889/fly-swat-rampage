@@ -107,7 +107,10 @@ def main() -> int:
             args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
                   "--autoplay-policy=no-user-gesture-required"],
         )
-        page = browser.new_page(viewport={"width": 430, "height": 880})
+        # 固定 en-US：整套檢查都假設英文文案。browser.new_page() 會繼承宿主 OS
+        # locale，在 zh-TW 機器上按鈕文字變中文，英文斷言（如 "keep going"）就會失敗。
+        dctx = browser.new_context(locale="en-US", viewport={"width": 430, "height": 880})
+        page = dctx.new_page()
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
         page.goto(url, wait_until="load")
@@ -943,6 +946,7 @@ def main() -> int:
               and zh["h1"] == "打擊蒼蠅大作戰" and zh["htmlLang"] == "zh-Hant",
               f"{h1_en} -> {zh['h1']} / {zh['stored']}")
         lctx.close()
+        dctx.close()
 
         browser.close()
 
