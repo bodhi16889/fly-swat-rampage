@@ -215,3 +215,12 @@ git push origin main          # 本站由 main / root 自動部署
 - 鹽槍／火焰方向為「點擊點 → 畫面中心」。
 - 場景為程序化繪製（無圖檔）；換美術可改 `drawBackground()`。
 - 100 關數值由生成器調整，個別關卡可能仍需實玩微調（`makeLevel` 是單一調整點）。
+
+## 授權
+
+本作品為**專有軟體（All Rights Reserved）**，完整條款見 [`LICENSE`](LICENSE)。
+
+- 保留一切權利；公開可讀不代表可再利用。
+- 對 GamePix 及其通路授予**非專屬、免權利金**的發行／展示／行銷授權，僅限送審包 `dist/fly-swat-rampage-gamepix.zip`，下架即終止。
+- 未經授權不得轉載、改作、商業使用，或把程式／美術／語音用於其他產品或作為訓練資料。
+- 送審 ZIP 內無第三方程式、字型、圖檔或音檔；GamePix SDK 由官方 CDN 於執行時載入，依 GamePix 自身條款。

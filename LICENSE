@@ -1,0 +1,126 @@
+Fly Swat Rampage (打擊蒼蠅大作戰)
+Proprietary License — All Rights Reserved
+
+Copyright (c) 2026 Adan Yao (GitHub: bodhi16889). All rights reserved.
+
+
+1. SCOPE
+
+This license covers all original material in this repository ("the Work"),
+including but not limited to:
+
+  - index.html — the game (source code, procedurally drawn graphics, Web Audio
+    synthesis, and the embedded synthesized voice clips)
+  - build_gamepix.py, verify_smoke.py, gamepix/make_assets.py
+  - the generated media in gamepix/assets/
+  - the leaderboard backend in server/
+  - the documentation (README.md, GAMEPIX_SUBMISSION.md, server/README.md)
+
+The Work is made publicly readable on GitHub for transparency and archival
+purposes. Public readability does not grant any right to use the Work.
+
+
+2. LIMITED PERMISSIONS
+
+2.1 Personal play. You may play any build of the Work that is published by the
+    Copyright Holder through an authorised channel (the GitHub Pages demo, the
+    GamePix listing, or any other channel the Copyright Holder designates), for
+    personal, non-commercial entertainment.
+
+2.2 Platform distribution. The Copyright Holder grants GamePix, and its
+    affiliated distribution channels, a non-exclusive, worldwide, royalty-free
+    license to host, reproduce, distribute, publicly perform, publicly display,
+    and market the submission build (dist/fly-swat-rampage-gamepix.zip) for as
+    long as the Work remains listed on that platform, in accordance with that
+    platform's standard terms. This license does not transfer ownership and
+    automatically terminates when the listing is removed.
+
+2.3 Review and testing. Reviewers, platform staff and security researchers may
+    run, inspect and test the Work for the purpose of evaluating it or
+    reporting a defect.
+
+2.4 Platform features. Viewing, forking or cloning through GitHub's own
+    features is permitted to the extent required by GitHub's Terms of Service,
+    and carries no further rights under this license.
+
+
+3. RESERVATION OF RIGHTS
+
+All rights not expressly granted in Section 2 are reserved by the Copyright
+Holder. No other license, express or implied, is granted by publication,
+distribution, or possession of the Work.
+
+
+4. RESTRICTIONS
+
+Except as permitted in Section 2, you may not:
+
+  a. copy, publish, redistribute, sublicense, sell, rent or otherwise make the
+     Work or any substantial part of it available to third parties;
+  b. create derivative works, translations, ports to other engines or
+     platforms, or modified builds, or distribute any of them;
+  c. use the Work, its graphics, its audio, or its embedded voice clips in any
+     other product, game, video, advertisement or dataset;
+  d. use the Work for any commercial purpose, including ad-supported
+     re-publication, NFT minting, or inclusion in a paid bundle;
+  e. remove, obscure or alter this license, the copyright notice, or any
+     attribution embedded in the Work;
+  f. submit the Work, or a modified build of it, to any game portal or store
+     other than channels authorised by the Copyright Holder;
+  g. use the Work to train machine-learning models for redistribution.
+
+Reverse engineering and decompilation are permitted only to the extent
+mandatory under applicable law.
+
+
+5. THIRD-PARTY COMPONENTS
+
+The Work contains no bundled third-party code, font data, images or audio
+samples. Specifically:
+
+  - The GamePix SDK (https://integration.gamepix.com/sdk/v3/gamepix.sdk.js)
+    is loaded at runtime from GamePix's servers and is governed by GamePix's
+    own terms. It is not part of this repository and is not redistributed or
+    relicensed here.
+  - The game icon, cover and screenshots are generated from the Work's own
+    canvas rendering; emoji glyphs are rendered by the player's operating
+    system and no font data is bundled.
+  - The two embedded Chinese voice clips were synthesized locally by the
+    Copyright Holder with Windows SAPI (Microsoft Hanhan, zh-TW) and are
+    included as base64 PCM data inside index.html.
+  - Playwright (Apache-2.0) is used only as a development-time dependency of
+    verify_smoke.py and gamepix/make_assets.py. It is not distributed in any
+    build of the Work.
+
+
+6. NO WARRANTY
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. THE COPYRIGHT
+HOLDER DOES NOT WARRANT THAT THE WORK WILL BE ERROR-FREE OR UNINTERRUPTED.
+
+
+7. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS IN
+THE WORK.
+
+
+8. TERMINATION
+
+Any breach of Section 4 terminates the permissions granted in Section 2
+automatically and immediately. On termination you must stop using the Work and
+delete all copies in your possession or control. Sections 3, 5, 6, 7 and 9
+survive termination.
+
+
+9. CONTACT
+
+For licensing enquiries, permission requests, or takedown notices, contact the
+repository owner through https://github.com/bodhi16889/fly-swat-rampage
+(issues) or the contact address listed on the GitHub profile.
+
+— END OF LICENSE —
