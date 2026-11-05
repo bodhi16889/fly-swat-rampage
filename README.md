@@ -144,7 +144,12 @@ python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage
 判定時間一律用 `wait_for_function`（等狀態變化）而不是固定 `sleep`：
 headless + SwiftShader 前 1–2 秒只有 1–2 fps，用睡眠會量到暖機或拍到舊座標。
 
-最近一次結果：
+**斷言語系必須固定 `en-US`**：所有文案斷言都是英文，所以每個 Playwright context 都要 `locale="en-US"`
+（共用 `page` 也不例外）。`browser.new_page()` 會繼承宿主 OS locale——在 `zh-TW` 機器上按鈕會變中文
+（例如「▶ 看廣告續命（容錯歸零 · 每局一次）」），`"keep going" in label` 這類斷言就會假失敗（實測 99/100）。
+需要中文介面時另開 `locale="zh-TW"` 的獨立 context，測完即 `close()`。
+
+最近一次結果（2026-11-05，本機 zh-TW 宿主，100/100，106s）：
 
 ```
 [PASS] V5：100 關 + 20 武器 + 5 章（每章 20 關）
