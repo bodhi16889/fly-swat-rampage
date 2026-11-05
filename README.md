@@ -119,7 +119,7 @@ python3 verify_smoke.py --headed           # 想看畫面
 python3 verify_smoke.py --base-url https://bodhi16889.github.io/fly-swat-rampage/index.html
 ```
 
-覆蓋範圍（98 項檢查）：
+覆蓋範圍（100 項檢查）：
 
 - 版面 / 主循環 / 暖機後 fps
 - 選單：100 關、5 章 × 20 格、20 武器、四種目標型別、無盡未解鎖
@@ -192,7 +192,7 @@ waves / decoys / rockets / drones / effects / weapon / progress / board / frame 
 ```bash
 python3 build_gamepix.py        # dist/fly-swat-rampage-gamepix.zip（根目錄只有 index.html）
 python3 gamepix/make_assets.py  # icon 512 / cover 1920×1080 / 5 張 1080×1920 截圖（另產 1 張封面主視覺）
-python3 verify_smoke.py         # 98 項
+python3 verify_smoke.py         # 100 項
 ```
 
 SDK：`GamePixConfig = { lifecycle:'manual' }`、`loading→loaded→gameStart`、`pause/resume`（停時鐘＋音訊）、

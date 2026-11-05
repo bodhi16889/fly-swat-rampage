@@ -3,7 +3,7 @@
 單檔 HTML5（Canvas 2D）直向打蒼蠅遊戲（V5：20 武器、100 關）。已接 GamePix SDK v3（manual lifecycle），
 英文為預設語言、中文僅在 `zh*` 系統顯示。這份文件是「照著填 / 照著傳」的清單。
 
-- 遊戲本體：`index.html`（約 345 KB，零圖檔／零音檔，全部內嵌）
+- 遊戲本體：`index.html`（約 350 KB，零圖檔／零音檔，全部內嵌）
 - 上傳檔：`dist/fly-swat-rampage-gamepix.zip`（約 157 KB，ZIP 根目錄只有 `index.html`）
 - 素材：`gamepix/assets/`
 - 驗證：`python3 verify_smoke.py`（100 項，全部 PASS，含對 ZIP 解壓後的版本跑過一次）
@@ -45,8 +45,17 @@
 因為公開 demo（GitHub Pages 頂層頁）不啟用廣告，避免 SDK 在非 Player 環境模擬假廣告；
 在 GamePix Player／iframe 或 gamepix.com 會自動啟用。
 
-存檔使用 `localStorage`，key 固定為 `fly.swat.progress`、`fly.swat.score`、`fly.swat.endless`、
-`fly.swat.muted`（GamePix 只會同步固定 key 的讀寫，不列舉）。
+存檔使用 `localStorage`，全部寫入都是固定 key、不列舉 storage：
+
+| key | 用途 |
+| :--- | :--- |
+| `fly.swat.score` | 累積分數（武器解鎖的唯一依據） |
+| `fly.swat.progress` | 已通關關卡（`{ "1": true, ... }`；決定解鎖與無盡模式） |
+| `fly.swat.best` | 每關本機前 5（PB） |
+| `fly.swat.endless` | 無盡模式本機 top 5 |
+| `fly.swat.profile` | 玩家暱稱 |
+| `fly.swat.lang` | 語言選擇 |
+| `fly.swat.muted` | 靜音狀態 |
 
 ## 2. Game Properties（後台欄位建議值）
 
