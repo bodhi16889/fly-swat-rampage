@@ -1,0 +1,70 @@
+name: smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: 100 項 E2E（Playwright + 自架 http.server）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install "playwright>=1.45"
+          python -m playwright install --with-deps chromium
+
+      - name: Run smoke suite
+        # verify_smoke.py 自己起 http.server 並載入 server/mock_server.py（全球榜 mock），
+        # 預設 headless；--headed 只在需要肉眼檢查時用，CI 不用。
+        run: python verify_smoke.py
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  submission-zip:
+    name: GamePix 送審包可重建且內容合規
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Rebuild submission zip and assert constraints
+        # build_gamepix.py 會清空 LB_URL、檢查外部網址白名單（只允許 GamePix SDK）、
+        # 並驗證 zip 只含 index.html；任一條件不符會以非 0 結束。
+        run: python build_gamepix.py
+
+      - name: Assert zip contents
+        run: python tools/assert_submission_zip.py
