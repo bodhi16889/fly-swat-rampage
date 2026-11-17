@@ -1,4 +1,4 @@
-# GamePix 上架包 — Fly Swat Rampage
+# GamePix 上架包 — Fly Swatter
 
 單檔 HTML5（Canvas 2D）直向打蒼蠅遊戲（V5：20 武器、100 關）。已接 GamePix SDK v3（manual lifecycle），
 英文為預設語言、中文僅在 `zh*` 系統顯示。這份文件是「照著填 / 照著傳」的清單。
@@ -61,7 +61,7 @@
 
 | 欄位 | 建議值 |
 | :--- | :--- |
-| Title | `Fly Swat Rampage` |
+| Title | `Fly Swatter` |
 | Orientation | `Any`（已決定；遊戲直向設計，但橫向 iframe 也能玩、無「請旋轉」提示；已測 640×480 與 1920×1080） |
 | Resolution | `1080 × 1920`（直向；responsive，已測 640×480 以上） |
 | Category | `Arcade`（次要：`Casual`） |
@@ -80,7 +80,7 @@ One-thumb fly-swatting arcade: 20 weapons, 100 levels across 5 chapters — ever
 ### 長描述（給商店頁）
 
 ```
-Grab the swatter and take back the house! Fly Swat Rampage is a fast, one-thumb arcade game
+Grab the swatter and take back the house! Fly Swatter is a fast, one-thumb arcade game
 about clearing a never-ending invasion of flies — from a watermelon on the living-room table
 to a back-alley showdown with the Fly King.
 
@@ -117,7 +117,7 @@ Bottom bar: switch between unlocked weapons.
 | Screenshot 5（無盡蟲群） | `gamepix/assets/screenshots/05-endless.png` | 1080×1920 | 694 KB |
 | （封面主視覺，不上傳） | `gamepix/assets/screenshots/00-hero.png` | 1080×1920 | 569 KB |
 
-封面與圖示上的標題都是 `FLY SWAT RAMPAGE`，與上架名稱一致；素材內無網址、無外部連結。
+封面與圖示上的標題都是 `FLY SWATTER`，與上架名稱（namespace fly-swatter）一致；素材內無網址、無外部連結。
 要重產：`python3 gamepix/make_assets.py`（Playwright，會起本機伺服器、用真實遊戲畫面截圖）。
 
 ## 4. Build（ZIP 已產好）
@@ -150,7 +150,7 @@ fly-swat-rampage-gamepix.zip
 
 ## 5. 上架流程（你在後台操作）
 
-1. **Create** 新專案，名稱 `Fly Swat Rampage`。
+1. **Create** 新專案，名稱 `Fly Swatter`。
 2. **Game Properties** 照上表填（Orientation / Resolution / Category / 描述 / 標籤）。
 3. **Media** 上傳 icon、cover、5 張截圖（檔名與用途對照上表）。
 4. **Build** 上傳 `dist/fly-swat-rampage-gamepix.zip`，先 Preview / Test 跑上面清單。
@@ -172,7 +172,7 @@ fly-swat-rampage-gamepix.zip
 | 無 Quit 按鈕 | ✅ | 選單只有關卡與開始 |
 | 不得要求旋轉裝置 | ✅ | 無此提示；直向／橫向都可玩 |
 | 語言預設英文 | ✅ | 非 `zh*` 一律英文；`zh*` 顯示繁中 |
-| 標題一致性 | ✅ | 選單、icon、cover、上架名稱皆 `FLY SWAT RAMPAGE` |
+| 標題一致性 | ✅ | 選單、icon、cover、上架名稱、namespace 皆 `Fly Swatter` |
 
 ## 已知限制／風險
 

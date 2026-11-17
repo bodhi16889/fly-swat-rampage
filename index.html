@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#14100c" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>打擊蒼蠅大作戰 V5 · Fly Swat Rampage</title>
+<title>Fly Swatter</title>
 <!-- GamePix SDK v3：必須先設 config 再載入 SDK（manual lifecycle 才有載入進度與 gameStart 訊號） -->
 <script>window.GamePixConfig = { lifecycle: 'manual' };</script>
 <script src="https://integration.gamepix.com/sdk/v3/gamepix.sdk.js"></script>
@@ -220,8 +220,8 @@
 <canvas id="game"></canvas>
 
 <div id="loading">
-  <div class="lt">FLY SWAT RAMPAGE</div>
-  <div class="lsub" id="loadingSub">打擊蒼蠅大作戰</div>
+  <div class="lt">FLY SWATTER</div>
+  <div class="lsub" id="loadingSub">TAP · SWAT · SURVIVE</div>
   <div class="lbar"><i></i></div>
   <div class="lp">Loading…</div>
 </div>
@@ -502,13 +502,23 @@ const Voice = {
     }
   },
 
-  /* 內嵌音檔解不開時的退路：瀏覽器 TTS */
+  /* 內嵌音檔解不開時的退路：瀏覽器 TTS —— 聲音語言必須跟介面一致。
+     英文模式挑英文聲音；找不到英文聲音就寧可安靜，
+     不要用中文聲音去念英文台詞（GamePix 退件原因之一）。 */
   speak(text) {
     if (Sfx.muted) return;
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    const tag = LANG === 'zh' ? 'zh-TW' : 'en-US';
+    const want = tag.slice(0, 2).toLowerCase();
     try {
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'zh-TW'; u.rate = 1.05; u.volume = 0.9;
-      window.speechSynthesis.speak(u);
+      u.lang = tag; u.rate = 1.05; u.volume = 0.9;
+      const voices = (synth.getVoices && synth.getVoices()) || [];
+      const v = voices.find(x => (x.lang || '').toLowerCase().indexOf(want) === 0);
+      if (!v && want !== 'zh') return;   /* 沒有英文聲音 → 不發聲，絕不借用中文聲音 */
+      if (v) { try { u.voice = v; } catch (e) { /* 不能用指定聲音就靠 u.lang */ } }
+      synth.speak(u);
     } catch (e) { /* 不支援就安靜 */ }
   },
 };
@@ -713,7 +723,7 @@ const I18N = {
     levelN: 'Level {n} · {name}',
     endlessTitle: 'Endless Rampage · ENDLESS',
     scoreUnit: 'pts',
-    gameTitle: 'FLY SWAT RAMPAGE',
+    gameTitle: 'Fly Swatter',
     tagline: '20 weapons · 100 levels · Endless mode',
     levelShort: 'Level {n}',
     goalScore: '{a} / {b} pts',
@@ -839,7 +849,7 @@ const I18N = {
     levelN: '第 {n} 關 · {name}',
     endlessTitle: '無盡狂暴模式 · ENDLESS',
     scoreUnit: '分',
-    gameTitle: '打擊蒼蠅大作戰',
+    gameTitle: 'Fly Swatter',
     tagline: '20 把武器 · 100 個關卡 · 無盡模式',
     levelShort: '第 {n} 關',
     goalScore: '{a} / {b} 分',
@@ -962,15 +972,13 @@ const I18N = {
   },
 };
 
+/* GamePix 送審要求：預設一律英文。
+   不看 navigator.languages、不看 localStorage —— 審核環境的系統語系或
+   舊的語言偏好都不能把介面帶成中文；要中文只能用 ?lang=zh 明確指定。 */
 function detectLang() {
   try {
     const q = new URLSearchParams(location.search).get('lang');
     if (q) return /^zh/i.test(q) ? 'zh' : 'en';
-    const stored = localStorage.getItem('fly.swat.lang');
-    if (stored === 'zh' || stored === 'en') return stored;
-    const list = (navigator.languages && navigator.languages.length)
-      ? navigator.languages : [navigator.language || 'en'];
-    for (const l of list) if (/^zh/i.test(l)) return 'zh';
   } catch (e) { /* ignore */ }
   return 'en';
 }
@@ -4556,7 +4564,7 @@ function showStart() {
 
   dom.card.innerHTML = `
     <h1>${t('gameTitle')}</h1>
-    <div class="sub">V5 · ARCADE</div>
+    <div class="sub">ARCADE</div>
     <p>${t('tagline')}</p>
     <div class="profile">
       <span>${t('player')}: <b id="profileName"></b></span>
@@ -4583,8 +4591,13 @@ function showStart() {
   document.getElementById('btnEndlessMenu').onclick = () => { Sfx.init(); startEndless(); };
   document.getElementById('btnRename').onclick = () => renderRename();
   document.getElementById('btnLang').onclick = () => {
-    try { localStorage.setItem('fly.swat.lang', LANG === 'zh' ? 'en' : 'zh'); } catch (e) { /* ignore */ }
-    location.reload();
+    const next = LANG === 'zh' ? 'en' : 'zh';
+    try { localStorage.setItem('fly.swat.lang', next); } catch (e) { /* ignore */ }
+    try {
+      const u = new URL(location.href);
+      u.searchParams.set('lang', next);
+      location.href = u.toString();     /* 用 ?lang= 指定，開機不看系統語系 */
+    } catch (e) { location.reload(); }
   };
   document.getElementById('btnBoard').onclick = () => showBoard(chap);
   const globalBtn = document.getElementById('btnGlobal');
@@ -4935,9 +4948,9 @@ function loop(now) {
 resize();
 Sfx.loadPref();
 document.documentElement.lang = LANG === 'zh' ? 'zh-Hant' : 'en';
-document.title = LANG === 'zh' ? '打擊蒼蠅大作戰 V5 · Fly Swat Rampage' : 'Fly Swat Rampage V5';
+document.title = 'Fly Swatter';
 const loadingSub = document.getElementById('loadingSub');
-if (loadingSub) loadingSub.textContent = LANG === 'zh' ? '打擊蒼蠅大作戰' : 'SWAT OR BE SWARMED';
+if (loadingSub) loadingSub.textContent = LANG === 'zh' ? '點擊拍打 · 長按噴霧' : 'TAP · SWAT · SURVIVE';
 dom.levelName.textContent = t('levelN', { n: 1, name: lvName(1) });
 dom.score.innerHTML = `0<small>${t('scoreUnit')}</small>`;
 // 還原累積分數 → 依門檻回推已解鎖武器（不觸發升級 toast）

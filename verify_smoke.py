@@ -695,17 +695,47 @@ def main() -> int:
         check("GamePix：非 Player 的公開頁不呼叫廣告",
               page.evaluate("__game.gp.adsAllowed === false"))
 
+        # ---------- 11b. 語系預設（GamePix 送審要求：一律英文）----------
         zctx = browser.new_context(locale="zh-TW")
         zp = zctx.new_page()
         zp.goto(url, wait_until="load")
         zp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
-        zh_h1 = zp.evaluate("document.querySelector('#card h1').textContent")
-        zh_chip = zp.evaluate("document.querySelector('.wbtn').textContent")
-        zh_lang = zp.evaluate("document.documentElement.lang")
+        dflt = zp.evaluate("({lang: __game.lang, htmlLang: document.documentElement.lang,"
+                           " h1: document.querySelector('#card h1').textContent,"
+                           " title: document.title,"
+                           " chip: document.querySelector('.wbtn').textContent})")
+        check("語系：系統是中文也預設英文（標題固定 Fly Swatter）",
+              dflt["lang"] == "en" and dflt["htmlLang"] == "en"
+              and dflt["h1"] == "Fly Swatter" and dflt["title"] == "Fly Swatter"
+              and "\u5831\u7d19" not in dflt["chip"], str(dflt))
+
+        VOICE_STUB = """(() => {
+          window.__utt = [];
+          const fake = { getVoices: () => [{lang: 'zh-TW', name: 'z'}, {lang: 'en-US', name: 'e'}],
+                         speak: (u) => window.__utt.push(u.lang) };
+          const real = window.speechSynthesis;
+          Object.defineProperty(window, 'speechSynthesis', {value: fake, configurable: true});
+          __game.voice.lastKillAt = -1e9;
+          __game.voice.kill();
+          Object.defineProperty(window, 'speechSynthesis', {value: real, configurable: true});
+          return window.__utt;
+        })()"""
+        en_voice = zp.evaluate(VOICE_STUB)
+        check("英文模式：人聲用英文聲音，不會出現 zh-TW",
+              bool(en_voice) and all(x == "en-US" for x in en_voice), str(en_voice))
+
+        zpz = zctx.new_page()
+        zpz.goto(url + "?lang=zh", wait_until="load")
+        zpz.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        zhst = zpz.evaluate("({lang: __game.lang, htmlLang: document.documentElement.lang,"
+                            " h1: document.querySelector('#card h1').textContent,"
+                            " chip: document.querySelector('.wbtn').textContent})")
+        zh_voice = zpz.evaluate(VOICE_STUB)
+        check("?lang=zh：介面中文、標題仍是 Fly Swatter、人聲是中文",
+              zhst["lang"] == "zh" and zhst["htmlLang"] == "zh-Hant"
+              and zhst["h1"] == "Fly Swatter" and "\u5831\u7d19" in zhst["chip"]
+              and (not zh_voice or all(x.startswith("zh") for x in zh_voice)), str(zhst))
         zctx.close()
-        check("語系：中文系統顯示中文、其餘預設英文",
-              zh_h1 == "打擊蒼蠅大作戰" and "報紙" in zh_chip and zh_lang == "zh-Hant",
-              f"{zh_h1} / {zh_chip} / lang={zh_lang}")
 
         page.evaluate("""(() => {
           window.__gpStub = { ints: 0, rews: 0, rewOk: true };
@@ -940,11 +970,14 @@ def main() -> int:
         lp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
         zh = lp.evaluate("({lang: __game.lang, stored: localStorage.getItem('fly.swat.lang'),"
                          " h1: document.querySelector('#card h1').textContent,"
-                         " htmlLang: document.documentElement.lang})")
+                         " chip: document.querySelector('.wbtn').textContent,"
+                         " htmlLang: document.documentElement.lang,"
+                         " url: location.search})")
         check("語言切換：英文介面可切中文、選擇會記住",
-              h1_en == "FLY SWAT RAMPAGE" and zh["lang"] == "zh" and zh["stored"] == "zh"
-              and zh["h1"] == "打擊蒼蠅大作戰" and zh["htmlLang"] == "zh-Hant",
-              f"{h1_en} -> {zh['h1']} / {zh['stored']}")
+              h1_en == "Fly Swatter" and zh["lang"] == "zh" and zh["stored"] == "zh"
+              and zh["h1"] == "Fly Swatter" and zh["htmlLang"] == "zh-Hant"
+              and "lang=zh" in zh["url"] and "\u5831\u7d19" in zh["chip"],
+              f"{h1_en} -> {zh['h1']} / {zh['stored']} / {zh['url']}")
         lctx.close()
         dctx.close()
 
