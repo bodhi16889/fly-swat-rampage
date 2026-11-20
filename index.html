@@ -200,6 +200,22 @@
   button:active { transform: translateY(1px); }
   button:disabled { opacity: .55; cursor: default; }
   button.reward { border-color: rgba(127, 224, 160, .65); color: #bff5d0; background: rgba(127, 224, 160, .12); }
+  .hud-row.third { margin-top: 4px; font-size: 11px; color: #ffe9b0; }
+  #bankChip { display: flex; align-items: center; gap: 4px; font-weight: 700; }
+  #bankChip small { opacity: .6; font-size: 9px; }
+  #autoBtn { border: 1px solid rgba(255,255,255,.22); background: rgba(0,0,0,.28); color: #cbb894; }
+  #autoBtn.on { background: #ffd166; color: #2a2118; border-color: #ffd166; }
+  .shop { margin: 8px 0 4px; padding: 8px 9px; border-radius: 12px; background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.10); text-align: left; }
+  .shopTitle { display: flex; justify-content: space-between; font-size: 10.5px; letter-spacing: .08em; color: #ffd166; margin-bottom: 6px; }
+  .shopGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .shopBtn { display: flex; flex-direction: column; gap: 1px; padding: 6px 4px; border-radius: 10px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); color: #f3e7cd; font-size: 10px; line-height: 1.4; }
+  .shopBtn b { font-size: 10.5px; }
+  .shopBtn small { font-size: 9px; opacity: .68; }
+  .shopBtn span { font-size: 10px; color: #ffd166; }
+  .shopBtn.poor { opacity: .5; }
+  .shopBtn.max { border-color: rgba(255,209,102,.5); color: #ffd166; }
+  .rebirth { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 10px; color: #b9a888; }
+  .rebirth .mini.poor { opacity: .45; }
   .hint { margin-top: 12px; font-size: 11px; color: #8d7c66; line-height: 1.7; }
 
   /* ---------- 載入畫面（GamePix 規定要有） ---------- */
@@ -241,6 +257,10 @@
   <div class="hud-row second">
     <div id="score">0<small>分</small></div>
     <div id="weaponChip"><span class="ico" id="weaponIcon">📰</span><span id="weaponName">捲起來的報紙</span></div>
+  </div>
+  <div class="hud-row third">
+    <div id="bankChip">💎 <span id="bank">0</span><small id="bankUnit"></small></div>
+    <button id="autoBtn" class="mini on" title="自動攻擊開關">⚡ <span id="autoLbl">AUTO</span></button>
   </div>
   <div id="bossWrap">
     <div id="bossName">腐敗蠅王 · LORD OF THE SWARM</div>
@@ -675,6 +695,13 @@ const state = {
   menuChapter: null,
   endless: false,
   score: 0,
+  bank: 0,                       // 可花用點數（升級貨幣）
+  upg: { dmg: 0, rate: 0, coin: 0 },
+  essence: 0,                    // 轉生精華（永久）
+  rebirths: 0,
+  deepest: 0,                    // 最高關卡（轉生計算用）
+  auto: true,                    // 自動攻擊（預設開）
+  autoT: 0,
   levelScore: 0,
   kills: 0,
   misses: 0,
@@ -709,7 +736,7 @@ const state = {
   miniBossT: 0,
   endlessEntryAt: null,
   levelConfig: null,
-  hud: { timer: '', score: '', prog: '', weapon: '', combo: '' },
+  hud: { timer: '', score: '', prog: '', weapon: '', combo: '', bank: '' },
 };
 let W = 0, H = 0, DPR = 1;
 let timeAlive = 0;
@@ -723,6 +750,15 @@ const I18N = {
     levelN: 'Level {n} · {name}',
     endlessTitle: 'Endless Rampage · ENDLESS',
     scoreUnit: 'pts',
+    bankUnit: 'pts',
+    autoOn: 'AUTO', autoOff: 'MANUAL',
+    shopTitle: 'UPGRADE', upg_dmg: 'POWER', upg_rate: 'AUTO RATE', upg_coin: 'POINTS GAIN',
+    upgMax: 'Already maxed out', upgMaxShort: 'MAX',
+    upgPoor: 'Not enough points — need {n} more', upgBought: '{name} Lv {lv}',
+    rebirthBtn: 'REBIRTH', rebirthConfirm: 'TAP AGAIN',
+    rebirthInfo: 'Essence {e} · Rebirths {n} · Next +{g}',
+    rebirthLocked: 'Reach level 20 or 30,000 pts to rebirth',
+    rebirthDone: 'Rebirth! +{g} essence (damage & points +{g}%)',
     gameTitle: 'Fly Swatter',
     tagline: '20 weapons · 100 levels · Endless mode',
     levelShort: 'Level {n}',
@@ -849,6 +885,15 @@ const I18N = {
     levelN: '第 {n} 關 · {name}',
     endlessTitle: '無盡狂暴模式 · ENDLESS',
     scoreUnit: '分',
+    bankUnit: '點',
+    autoOn: '自動', autoOff: '手動',
+    shopTitle: '武器升級', upg_dmg: '威力', upg_rate: '自動射速', upg_coin: '點數轉換',
+    upgMax: '已滿級', upgMaxShort: '滿級',
+    upgPoor: '點數不足，還差 {n}', upgBought: '{name} 升到 Lv {lv}',
+    rebirthBtn: '轉生', rebirthConfirm: '再按一次',
+    rebirthInfo: '精華 {e} · 已轉生 {n} 次 · 這次可得 +{g}',
+    rebirthLocked: '打到第 20 關或 30,000 分才能轉生',
+    rebirthDone: '轉生完成，精華 +{g}（傷害與點數 +{g}%）',
     gameTitle: 'Fly Swatter',
     tagline: '20 把武器 · 100 個關卡 · 無盡模式',
     levelShort: '第 {n} 關',
@@ -1414,6 +1459,7 @@ function loadProgress() {
   try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch (e) { return {}; }
 }
 function saveProgress(level) {
+  if (level > state.deepest) { state.deepest = level; saveMeta(); }
   try {
     const p = loadProgress();
     p[level] = true;
@@ -1664,11 +1710,184 @@ function saveBoard(entry) {
   return top;
 }
 
+
+/* ==================================================================== *
+ * 10b. 轉生與升級（idle 層）
+ *   分數 → 點數（自動累積）→ 手動買升級 → 轉生換永久精華
+ * ==================================================================== */
+const META_KEY = 'fly.swat.meta';
+
+const UPGRADES = {
+  dmg:  { base: 80,  mult: 1.30, max: 20, step: 0.15 },   // 傷害 +15%/級
+  rate: { base: 100, mult: 1.32, max: 15, step: 0.06 },   // 自動間隔 -6%/級
+  coin: { base: 150, mult: 1.35, max: 10, step: 0.05 },   // 得分→點數 +5%/級
+};
+
+function loadMeta() {
+  try {
+    const m = JSON.parse(localStorage.getItem(META_KEY) || '{}');
+    state.bank = Math.max(0, Number(m.bank) || 0);
+    state.essence = Math.max(0, m.essence | 0);
+    state.rebirths = Math.max(0, m.rebirths | 0);
+    state.deepest = Math.max(0, m.deepest | 0);
+    state.auto = m.auto !== false;
+    const u = m.upg || {};
+    state.upg = {
+      dmg: clamp(u.dmg | 0, 0, UPGRADES.dmg.max),
+      rate: clamp(u.rate | 0, 0, UPGRADES.rate.max),
+      coin: clamp(u.coin | 0, 0, UPGRADES.coin.max),
+    };
+  } catch (e) { /* 私密模式 */ }
+}
+
+function saveMeta() {
+  try {
+    localStorage.setItem(META_KEY, JSON.stringify({
+      bank: Math.round(state.bank), upg: state.upg, essence: state.essence,
+      rebirths: state.rebirths, deepest: state.deepest, auto: state.auto,
+    }));
+  } catch (e) { /* ignore */ }
+}
+
+function dmgMult() { return 1 + UPGRADES.dmg.step * state.upg.dmg + 0.01 * state.essence; }
+function coinRate() { return 0.2 + UPGRADES.coin.step * state.upg.coin + 0.01 * state.essence; }
+function autoInterval() { return Math.max(0.4, 1.25 * (1 - UPGRADES.rate.step * state.upg.rate)); }
+function upgCost(k) { const u = UPGRADES[k]; return Math.round(u.base * Math.pow(u.mult, state.upg[k])); }
+
+function buyUpgrade(k) {
+  const u = UPGRADES[k];
+  if (!u) return false;
+  if (state.upg[k] >= u.max) { showToast(t('upgMax')); return false; }
+  const cost = upgCost(k);
+  if (state.bank < cost) { showToast(t('upgPoor', { n: cost - Math.floor(state.bank) })); return false; }
+  state.bank -= cost;
+  state.upg[k]++;
+  saveMeta();
+  if (typeof Sfx !== 'undefined' && Sfx.upgrade) Sfx.upgrade();
+  showToast(t('upgBought', { name: t('upg_' + k), lv: state.upg[k] }));
+  renderShop();
+  updateHud(true);
+  return true;
+}
+
+function toggleAuto() {
+  state.auto = !state.auto;
+  state.autoT = 0;
+  saveMeta();
+  updateAutoBtn();
+  return state.auto;
+}
+
+function updateAutoBtn() {
+  const b = document.getElementById('autoBtn');
+  if (!b) return;
+  b.classList.toggle('on', state.auto);
+  const l = document.getElementById('autoLbl');
+  if (l) l.textContent = state.auto ? t('autoOn') : t('autoOff');
+}
+
+/* 轉生：本輪最高關卡 ≥20 或累積分數 ≥30000 才可轉 */
+function rebirthGain() {
+  if (state.deepest < 20 && state.score < 30000) return 0;
+  return 1 + Math.floor(state.deepest / 10) + Math.floor(Math.sqrt(state.score / 2000));
+}
+
+function doRebirth() {
+  const gain = rebirthGain();
+  if (!gain) { showToast(t('rebirthLocked')); return 0; }
+  state.essence += gain;
+  state.rebirths++;
+  state.bank = 0;
+  state.upg = { dmg: 0, rate: 0, coin: 0 };
+  state.score = 0;
+  state.deepest = 0;
+  state.level = 1;
+  state.unlocked = clamp(1 + Math.floor(state.essence / 10), 1, 5);
+  state.weaponIndex = state.unlocked - 1;
+  try { localStorage.removeItem(PROGRESS_KEY); } catch (e) { /* ignore */ }
+  saveScore();
+  saveMeta();
+  showToast(t('rebirthDone', { g: gain }));
+  if (typeof Sfx !== 'undefined' && Sfx.win) Sfx.win();
+  renderWeaponBar();
+  updateWeaponChip();
+  showStart();
+  return gain;
+}
+
+function armRebirth(btn) {
+  if (!btn) return;
+  if (btn.dataset.armed === '1') { btn.dataset.armed = ''; doRebirth(); return; }
+  btn.dataset.armed = '1';
+  btn.innerHTML = `🌀 ${t('rebirthConfirm')}`;
+  clearTimeout(armRebirth._t);
+  armRebirth._t = setTimeout(() => {
+    if (btn.isConnected) { btn.dataset.armed = ''; btn.innerHTML = `🌀 ${t('rebirthBtn')}`; }
+  }, 4000);
+}
+
+function shopHtml() {
+  const rows = ['dmg', 'rate', 'coin'].map((k) => {
+    const u = UPGRADES[k], lv = state.upg[k], maxed = lv >= u.max;
+    const cost = upgCost(k), afford = !maxed && state.bank >= cost;
+    return `<button class="shopBtn${maxed ? ' max' : ''}${afford || maxed ? '' : ' poor'}" data-upg="${k}" ${maxed ? 'disabled' : ''}>`
+      + `<b>${t('upg_' + k)}</b><small>Lv ${lv}/${u.max}</small>`
+      + `<span>${maxed ? t('upgMaxShort') : '💎 ' + cost}</span></button>`;
+  }).join('');
+  const gain = rebirthGain();
+  const info = gain
+    ? t('rebirthInfo', { e: state.essence, n: state.rebirths, g: gain })
+    : t('rebirthLocked');
+  return `<div class="shop">
+    <div class="shopTitle"><span>💎 ${t('shopTitle')}</span><b>${Math.floor(state.bank)}</b></div>
+    <div class="shopGrid">${rows}</div>
+    <div class="rebirth"><span>${info}</span>
+      <button id="btnRebirth" class="mini ${gain ? '' : 'poor'}" ${gain ? '' : 'disabled'}>🌀 ${t('rebirthBtn')}</button>
+    </div>
+  </div>`;
+}
+
+function renderShop() {
+  const host = document.getElementById('shopHost');
+  if (!host) return;
+  host.innerHTML = shopHtml();
+  host.querySelectorAll('[data-upg]').forEach((b) => { b.onclick = () => buyUpgrade(b.dataset.upg); });
+  const rb = document.getElementById('btnRebirth');
+  if (rb) rb.onclick = () => armRebirth(rb);
+}
+
+/* 自動攻擊：每 autoInterval() 秒自動鎖定最近目標打一下 */
+function nearestEnemy() {
+  let best = null, bd = Infinity;
+  const ox = W / 2, oy = H * 0.62;
+  for (const f of state.flies) {
+    if (!f || f.dead || f.state === 'dying' || f.friendly) continue;
+    const d = dist2(ox, oy, f.x, f.y);
+    if (d < bd) { bd = d; best = f; }
+  }
+  return best;
+}
+
+function autoAttack(dt) {
+  if (!state.auto || state.paused || state.phase !== 'playing') return;
+  if (state.weaponLockT > 0) return;
+  state.autoT -= dt;
+  if (state.autoT > 0) return;
+  const target = nearestEnemy();
+  if (!target) { state.autoT = 0.1; return; }
+  state.autoT = autoInterval();
+  attack(target.x, target.y);
+}
+
 function addScore(n) {
   state.score = Math.max(0, state.score + n);
-  if (n > 0) state.levelScore += n;
+  if (n > 0) {
+    state.levelScore += n;
+    state.bank += n * coinRate();          // 分數自動轉成可花用點數
+  }
   checkUnlock();
   saveScore();
+  saveMeta();
 }
 
 function checkUnlock() {
@@ -1943,6 +2162,8 @@ function zapTo(x1, y1, x2, y2) {
 function damageFly(f, dmg, hx, hy, opts = {}) {
   if (!f || f.dead || f.state === 'dying') return;
   if (f.friendly) { addBeeHit(f); return; }
+
+  dmg = Math.max(1, Math.round(dmg * dmgMult()));   // 升級與精華加成
 
   if (f.isBoss) {
     if (f.shieldCount > 0 && !opts.pierce) {
@@ -4089,6 +4310,7 @@ function update(dt) {
   if (state.weaponLockT > 0) state.weaponLockT -= dt;
   if (state.comboT > 0) { state.comboT -= dt; if (state.comboT <= 0) state.combo = 0; }
   if (state.cool > 0) state.cool -= dt;
+  autoAttack(dt);
 
   const cfg = state.levelConfig;
   if (state.endless) state.survival += dt; else state.timeLeft -= dt;
@@ -4343,6 +4565,12 @@ function updateHud(force = false) {
     dom.score.innerHTML = `${scoreTxt}<small>${t('scoreUnit')}</small>`;
     state.hud.score = scoreTxt;
   }
+  const bankTxt = String(Math.floor(state.bank));
+  if (force || bankTxt !== state.hud.bank) {
+    const bankEl = document.getElementById('bank');
+    if (bankEl) bankEl.textContent = bankTxt;
+    state.hud.bank = bankTxt;
+  }
   let prog = 0, label = '';
   if (cfg.goal.type === 'score') {
     prog = clamp(state.levelScore / cfg.goal.target, 0, 1);
@@ -4583,9 +4811,12 @@ function showStart() {
     <button class="lv endless${endlessUnlocked() ? '' : ' locked'}" id="btnEndlessMenu" ${endlessUnlocked() ? '' : 'disabled'}>
       <b>${endlessUnlocked() ? t('endlessCard') : t('endlessLocked')}</b><span>${t('endlessSub')}</span></button>
     ${boardHtml}
+    <div id="shopHost">${shopHtml()}</div>
     <div class="btns"><button id="btnStart" class="primary">${t('startFrom1')}</button></div>
     <div class="hint">${t('playHint')}</div>`;
   dom.modal.classList.remove('hidden');
+  renderShop();
+  updateAutoBtn();
   document.getElementById('profileName').textContent = PROFILE.name;
   document.getElementById('btnStart').onclick = () => { Sfx.init(); state.menuChapter = 1; startLevel(1, true); };
   document.getElementById('btnEndlessMenu').onclick = () => { Sfx.init(); startEndless(); };
@@ -4802,6 +5033,8 @@ function releasePointer(e) {
 canvas.addEventListener('pointerup', releasePointer);
 canvas.addEventListener('pointercancel', releasePointer);
 canvas.addEventListener('lostpointercapture', releasePointer);
+const _autoBtnEl = document.getElementById('autoBtn');
+if (_autoBtnEl) _autoBtnEl.addEventListener('click', () => { Sfx.init(); toggleAuto(); });
 document.getElementById('muteBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   Sfx.init();
@@ -4955,7 +5188,8 @@ dom.levelName.textContent = t('levelN', { n: 1, name: lvName(1) });
 dom.score.innerHTML = `0<small>${t('scoreUnit')}</small>`;
 // 還原累積分數 → 依門檻回推已解鎖武器（不觸發升級 toast）
 state.score = loadScore();
-state.unlocked = unlockedFromScore(state.score);
+loadMeta();
+state.unlocked = Math.max(unlockedFromScore(state.score), clamp(1 + Math.floor(state.essence / 10), 1, 5));
 state.weaponIndex = state.unlocked - 1;
 renderWeaponBar();
 updateWeaponChip();
@@ -4971,7 +5205,9 @@ requestAnimationFrame(() => requestAnimationFrame(() => {
 
 window.__game = {
   get ready() { return true; },
-  state, LEVELS, WEAPONS, FLY_TYPES,
+  state, LEVELS, WEAPONS, FLY_TYPES, UPGRADES,
+  buyUpgrade, doRebirth, rebirthGain, toggleAuto, autoAttack, nearestEnemy,
+  dmgMult, coinRate, autoInterval, upgCost, loadMeta, saveMeta,
   get flies() { return state.flies; },
   get boss() { return state.boss; },
   get clouds() { return state.clouds; },

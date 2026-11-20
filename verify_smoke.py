@@ -244,6 +244,7 @@ def main() -> int:
             decoded = False
         check("人聲 3 段已解碼", decoded, str(page.evaluate("Object.keys(__game.voice.buffers)")))
 
+        page.evaluate("__game.state.auto = false; __game.state.autoT = 0")   # 音效斷言需要只有玩家這一下
         page.evaluate("__game.audio.log.length = 0; __game.voice.log.length = 0")
         fly = page.evaluate("(() => { const f = __game.spawnFly(innerWidth * .5, innerHeight * .45, 'house'); return {x: f.x, y: f.y}; })()")
         page.mouse.click(fly["x"], fly["y"])
@@ -685,6 +686,124 @@ def main() -> int:
               reset["score"] == 0 and reset["unlocked"] == 1 and reset["stored"] == "0"
               and reset["level"] == 1, str(reset))
 
+        # ---------- 11c. idle 層：轉生 / 自動攻擊 / 分數升級 ----------
+        page.evaluate("try { ['fly.swat.meta','fly.swat.score','fly.swat.progress']"
+                      ".forEach(k => localStorage.removeItem(k)); } catch (e) {}")
+        page.reload(wait_until="load")
+        page.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        wait_frames(page, 5)
+
+        m0 = page.evaluate("({auto: __game.state.auto, bank: __game.state.bank,"
+                           " upg: __game.state.upg, essence: __game.state.essence})")
+        check("idle：預設開自動攻擊、點數 0、無升級、無精華",
+              m0["auto"] is True and m0["bank"] == 0
+              and m0["upg"] == {"dmg": 0, "rate": 0, "coin": 0} and m0["essence"] == 0, str(m0))
+
+        ui = page.evaluate("({bank: !!document.getElementById('bank'),"
+                           " auto: !!document.getElementById('autoBtn'),"
+                           " shop: !!document.getElementById('shopHost'),"
+                           " rebirth: !!document.getElementById('btnRebirth')})")
+        check("idle：HUD 有點數與自動鍵、選單有升級與轉生按鈕", all(ui.values()), str(ui))
+
+        page.evaluate("__game.addScore(1000)")
+        bank = page.evaluate("({score: __game.state.score, bank: __game.state.bank,"
+                             " rate: __game.coinRate(),"
+                             " saved: (JSON.parse(localStorage.getItem('fly.swat.meta') || '{}')).bank})")
+        check("idle：得分會累積點數（基礎 20%）並寫進存檔",
+              bank["score"] == 1000 and abs(bank["bank"] - 200) < 1 and bank["saved"] == 200, str(bank))
+
+        buy = page.evaluate("""(() => {
+          const before = {bank: __game.state.bank, lv: __game.state.upg.dmg, mult: __game.dmgMult()};
+          const ok = __game.buyUpgrade('dmg');
+          return {ok, before, cost: __game.upgCost('dmg'),
+                  after: {bank: __game.state.bank, lv: __game.state.upg.dmg, mult: __game.dmgMult()}};
+        })()""")
+        check("idle：買威力會扣點、等級 +1、傷害倍率提高",
+              buy["ok"] is True and buy["after"]["lv"] == buy["before"]["lv"] + 1
+              and abs(buy["after"]["bank"] - (buy["before"]["bank"] - 80)) < 1e-6
+              and buy["after"]["mult"] > buy["before"]["mult"], str(buy))
+
+        poor = page.evaluate("""(() => {
+          const s = __game.state, keep = s.bank;
+          s.bank = 5;
+          const ok = __game.buyUpgrade('coin');
+          const r = {ok, lv: s.upg.coin, bank: s.bank};
+          s.bank = keep + 300; return r;
+        })()""")
+        check("idle：點數不足買不了、也不會扣點",
+              poor["ok"] is False and poor["lv"] == 0 and poor["bank"] == 5, str(poor))
+
+        auto_on = page.evaluate("""async () => {
+          const s = __game.state;
+          s.auto = true; s.autoT = 0;
+          s.score = 0; s.unlocked = 1; s.weaponIndex = 0;   // 用最基本的報紙，確定自動攻擊會擊殺
+          __game.startLevel(1, false);
+          const k0 = s.kills, f0 = __game.frame;
+          await new Promise(r => setTimeout(r, 3000));
+          const t = __game.nearestEnemy();
+          return {k0, k1: s.kills, flies: s.flies.filter(f => !f.dead && !f.friendly).length,
+                  interval: __game.autoInterval(), frames: __game.frame - f0,
+                  auto: s.auto, paused: s.paused, phase: s.phase, cool: +s.cool.toFixed(2),
+                  autoT: +s.autoT.toFixed(2), lock: +s.weaponLockT.toFixed(2),
+                  target: t ? [Math.round(t.x), Math.round(t.y)] : null,
+                  weapon: __game.weapon, score: s.score};
+        }""")
+        check("自動攻擊：完全不點擊也會自己清掉蒼蠅",
+              auto_on["k1"] > auto_on["k0"] and auto_on["interval"] <= 1.25,
+              f"kills {auto_on['k0']} -> {auto_on['k1']}, interval={auto_on['interval']:.2f}s, {auto_on}")
+
+        auto_off = page.evaluate("""async () => {
+          const s = __game.state;
+          s.auto = false; s.autoT = 0;
+          const k0 = s.kills;
+          await new Promise(r => setTimeout(r, 1600));
+          const k1 = s.kills;
+          s.auto = true;
+          return {k0, k1};
+        }""")
+        check("自動攻擊：關掉後不再自己出手", auto_off["k1"] == auto_off["k0"], str(auto_off))
+
+        reb = page.evaluate("""(() => {
+          const s = __game.state;
+          s.deepest = 0; s.score = 100; s.essence = 0;
+          const blocked = __game.rebirthGain();
+          s.deepest = 20;
+          const gain = __game.rebirthGain();
+          return {blocked, gain};
+        })()""")
+        check("轉生：未達門檻（20 關或 30,000 分）不給精華，達標才給",
+              reb["blocked"] == 0 and reb["gain"] >= 1, str(reb))
+
+        done = page.evaluate("""(() => {
+          const s = __game.state;
+          s.deepest = 30; s.score = 40000; s.bank = 500;
+          s.upg = {dmg: 5, rate: 2, coin: 1}; s.essence = 0; s.rebirths = 0;
+          const before = __game.dmgMult();
+          const gain = __game.doRebirth();
+          return {gain, score: s.score, bank: s.bank, upg: s.upg, essence: s.essence,
+                  rebirths: s.rebirths, deepest: s.deepest, phase: s.phase,
+                  mult: __game.dmgMult(), before,
+                  saved: JSON.parse(localStorage.getItem('fly.swat.meta') || '{}').essence};
+        })()""")
+        check("轉生：拿精華、分數/點數/升級/進度歸零、永久傷害加成生效、寫進存檔",
+              done["gain"] >= 1 and done["score"] == 0 and done["bank"] == 0
+              and done["upg"] == {"dmg": 0, "rate": 0, "coin": 0}
+              and done["essence"] == done["gain"] and done["saved"] == done["gain"]
+              and done["rebirths"] == 1 and done["deepest"] == 0
+              and abs(done["mult"] - (1 + 0.01 * done["gain"])) < 1e-9
+              and done["phase"] == "menu", str(done))
+
+        page.reload(wait_until="load")
+        page.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
+        page.wait_for_function("__game.gp.log.includes('loaded')", timeout=15_000)
+        kept = page.evaluate("({essence: __game.state.essence, rebirths: __game.state.rebirths,"
+                             " score: __game.state.score, mult: __game.dmgMult()})")
+        check("idle：精華／轉生次數重載後仍保留、分數歸零",
+              kept["essence"] == done["gain"] and kept["rebirths"] == 1
+              and kept["score"] == 0 and kept["mult"] > 1.0, str(kept))
+        page.evaluate("__game.startLevel(1, false)")
+        wait_frames(page, 3)
+
         # ---------- 12. GamePix SDK（生命週期／暫停／廣告／復活／續命／無 SDK） ----------
         gp = page.evaluate("({enabled: __game.gp.enabled, log: __game.gp.log,"
                            " hidden: document.getElementById('loading').classList.contains('hidden')})")
@@ -997,7 +1116,7 @@ def main() -> int:
     if FAILS:
         print(f"RESULT: FAIL ({len(FAILS)}: {', '.join(FAILS)})")
         return 1
-    print("RESULT: PASS (100 關 / 100 場景 / 20 武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / 本機 PB / 全球榜 / GamePix SDK / 手機 / 640×480)")
+    print("RESULT: PASS (100 關 / 100 場景 / 20 武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / 本機 PB / 全球榜 / 轉生 / 自動攻擊 / 分數升級 / GamePix SDK / 手機 / 640×480)")
     return 0
 
 
