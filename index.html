@@ -207,7 +207,14 @@
   #autoBtn.on { background: #ffd166; color: #2a2118; border-color: #ffd166; }
   .shop { margin: 8px 0 4px; padding: 8px 9px; border-radius: 12px; background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.10); text-align: left; }
   .shopTitle { display: flex; justify-content: space-between; font-size: 10.5px; letter-spacing: .08em; color: #ffd166; margin-bottom: 6px; }
-  .shopGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .shopGrid { display: grid; gap: 6px; }
+  .shopGrid.w { grid-template-columns: repeat(3, 1fr); }
+  .shopGrid.g { grid-template-columns: repeat(2, 1fr); margin-top: 6px; }
+  .ladder { margin: 8px 0 4px; }
+  .ladTop { display: flex; justify-content: space-between; font-size: 10px; color: #b9a888; margin-bottom: 6px; }
+  .lv.next { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+  .lv.next b { font-size: 12px; }
+  .lv.next span { font-size: 10px; opacity: .7; }
   .shopBtn { display: flex; flex-direction: column; gap: 1px; padding: 6px 4px; border-radius: 10px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); color: #f3e7cd; font-size: 10px; line-height: 1.4; }
   .shopBtn b { font-size: 10.5px; }
   .shopBtn small { font-size: 9px; opacity: .68; }
@@ -546,29 +553,17 @@ const Voice = {
 /* ==================================================================== *
  * 2. 武器 / 蒼蠅 / 關卡資料（V5：20 把武器 · 5 章 × 20 關 + 無盡模式）
  * ==================================================================== */
+/* 三把重型武器：種類少、等級無上限（傷害隨等級線性成長）。
+   升級消耗「點數」，由分數自動累積，玩家手動按。 */
 const WEAPONS = [
-  { id: 'newspaper', name: '捲起來的報紙', short: '報紙', icon: '📰', unlock: 0, radius: 40, cooldown: 0.35, mode: 'tap', damage: 1, branch: 'precise' },
-  { id: 'swatter', name: '傳統塑膠蒼蠅拍', short: '塑膠拍', icon: '🏓', unlock: 400, radius: 70, cooldown: 0.25, mode: 'tap', damage: 1, branch: 'precise' },
-  { id: 'trap', name: '黏蠅紙陷阱板', short: '黏紙', icon: '🪤', unlock: 1000, radius: 120, cooldown: 1.2, mode: 'trap', branch: 'precise', trapTTL: 4, freeze: 2 },
-  { id: 'electric', name: '電蚊拍', short: '電蚊拍', icon: '⚡', unlock: 1800, radius: 100, cooldown: 0.20, mode: 'tap', damage: 1, aoe: true, chain: 2, branch: 'area' },
-  { id: 'salt', name: '散彈鹽狗散彈槍', short: '鹽槍', icon: '🧂', unlock: 3000, radius: 180, cooldown: 0.45, mode: 'fan', branch: 'precise', fanDeg: 60, edgeDamage: 1, centerDamage: 3 },
-  { id: 'spray', name: '強效殺蟲噴霧', short: '噴霧', icon: '🧴', unlock: 4500, radius: 160, cooldown: 0.20, mode: 'hold', branch: 'area', tick: 0.3, tickDamage: 1 },
-  { id: 'twin', name: '雙持高壓電蚊拍', short: '雙拍', icon: '⚡⚡', unlock: 6500, radius: 90, cooldown: 0.15, mode: 'tap', damage: 1, aoe: true, twin: true, branch: 'area' },
-  { id: 'laser', name: '終極除蟲雷射炮', short: '雷射', icon: '🔫', unlock: 9000, radius: 0, cooldown: 0.80, mode: 'laser', band: 40, damage: 99, bossDamage: 8, pierce: true, branch: 'area' },
-  /* --- V5：第二梯隊（12 把，機制不重複只調數值） --- */
-  { id: 'net', name: '高壓電擊網', short: '電網', icon: '🕸️', unlock: 12000, radius: 150, cooldown: 0.35, mode: 'tap', damage: 1, aoe: true, chain: 3, branch: 'area' },
-  { id: 'cryo', name: '急凍噴射器', short: '冰霧', icon: '❄️', unlock: 15500, radius: 170, cooldown: 0.25, mode: 'hold', branch: 'area', tick: 0.25, tickDamage: 1, freeze: 0.8 },
-  { id: 'triple', name: '三連蒼蠅拍', short: '三連', icon: '🏓', unlock: 19500, radius: 65, cooldown: 0.30, mode: 'tap', damage: 1, aoe: true, triple: true, branch: 'precise' },
-  { id: 'sonic', name: '音波震盪器', short: '音波', icon: '🔊', unlock: 24000, radius: 230, cooldown: 0.60, mode: 'wave', damage: 1, branch: 'area' },
-  { id: 'decoy', name: '誘餌陷阱', short: '誘餌', icon: '🍯', unlock: 29000, radius: 160, cooldown: 2.40, mode: 'decoy', damage: 2, branch: 'precise' },
-  { id: 'flame', name: '火焰噴射器', short: '火焰', icon: '🔥', unlock: 34500, radius: 210, cooldown: 0.18, mode: 'holdFan', branch: 'area', fanDeg: 70, tick: 0.2, tickDamage: 1 },
-  { id: 'magnet', name: '磁力吸塵器', short: '磁力', icon: '🧲', unlock: 40500, radius: 240, cooldown: 1.00, mode: 'magnet', damage: 2, branch: 'area' },
-  { id: 'rocket', name: '火箭除蟲炮', short: '火箭', icon: '🚀', unlock: 47000, radius: 110, cooldown: 1.20, mode: 'rocket', damage: 3, branch: 'precise' },
-  { id: 'plasma', name: '等離子切割槍', short: '電漿', icon: '🔆', unlock: 54500, radius: 0, cooldown: 0.90, mode: 'laser', band: 60, damage: 99, bossDamage: 12, pierce: true, branch: 'area' },
-  { id: 'iceTrap', name: '急凍陷阱板', short: '冰紙', icon: '🧊', unlock: 63000, radius: 140, cooldown: 1.50, mode: 'trap', branch: 'precise', trapTTL: 5, freeze: 3.5 },
-  { id: 'drone', name: '自動巡弋無人機', short: '無人機', icon: '🛸', unlock: 73000, radius: 260, cooldown: 6.00, mode: 'drone', damage: 1, droneTTL: 6, fireEvery: 0.35, branch: 'area' },
-  { id: 'nuke', name: '全域殲滅裝置', short: '殲滅', icon: '☢️', unlock: 85000, radius: 0, cooldown: 8.00, mode: 'screen', bossDamage: 15, branch: 'area' },
+  { id: 'hammer', name: '重型碎蠅錘', short: '重錘', icon: '🔨', radius: 120, cooldown: 0.62,
+    mode: 'tap', damage: 4, aoe: true, branch: 'heavy' },
+  { id: 'flame', name: '重型火焰噴射器', short: '火焰', icon: '🔥', radius: 210, cooldown: 0.30,
+    mode: 'holdFan', fanDeg: 74, tick: 0.22, tickDamage: 2, branch: 'heavy' },
+  { id: 'plasma', name: '重型電漿炮', short: '電漿', icon: '🔆', radius: 0, cooldown: 0.95,
+    mode: 'laser', band: 70, damage: 99, bossDamage: 10, pierce: true, branch: 'heavy' },
 ];
+const WLV_MAX = 9999;             // 實質無上限
 
 const FLY_TYPES = {
   house:    { r: 11, hp: 1,  speed: 150, points: 20, color: '#4a4a52', label: '家蠅' },
@@ -614,8 +609,10 @@ const DEFEND_TIP = { zh: '防禦：停在可頌上的蒼蠅會持續扣衛生度
 
 /* 100 關：5 章 × 20 關，數值隨關卡單調變難（生成而非手寫，避免 100 份重複資料漂移） */
 function makeLevel(n) {
-  const chapter = CHAPTERS[Math.floor((n - 1) / 20)];
+  const chapter = CHAPTERS[Math.floor((n - 1) / 20) % CHAPTERS.length];
   const stage = ((n - 1) % 20) + 1;
+  const loop = Math.floor((n - 1) / (CHAPTERS.length * 20)) + 1;
+  const tier = loop - 1;
   const isBoss = stage % 10 === 0;
   const isDefend = !isBoss && chapter.id === 3 && stage % 3 !== 0;
   const isKills = !isBoss && !isDefend && (chapter.id === 2 || chapter.id === 4 || stage % 2 === 0);
@@ -634,9 +631,12 @@ function makeLevel(n) {
     name: chapter.name,
     name_en: chapter.name_en,
     time: 40,
-    speedMul: Math.min(1.5, 1 + (n - 1) * 0.0035),
-    spawnEvery: Math.max(0.30, 0.95 - n * 0.006),
-    targetCount: Math.min(28, 8 + Math.floor(n * 0.17)),
+    loop,
+    tier,
+    hpMul: 1 + tier * 0.8,
+    speedMul: Math.min(2.8, 1 + (n - 1) * 0.0035),
+    spawnEvery: Math.max(0.14, 0.95 - n * 0.006),
+    targetCount: Math.min(60, 8 + Math.floor(n * 0.17)),
     types,
     tip: chapter.tip,
     tip_en: chapter.tip_en,
@@ -677,6 +677,11 @@ function makeLevel(n) {
 
 const LEVELS = {};
 for (let n = 1; n <= 100; n++) LEVELS[n] = makeLevel(n);
+/* 無限關卡：超過 100 關即時產生並快取（章節主題循環、每 100 關一階更硬） */
+function levelCfg(n) {
+  if (LEVELS[n]) return LEVELS[n];
+  return (LEVELS[n] = makeLevel(n));
+}
 
 const ENDLESS_CFG = {
   name: '無盡狂暴模式', time: Infinity,
@@ -696,7 +701,7 @@ const state = {
   endless: false,
   score: 0,
   bank: 0,                       // 可花用點數（升級貨幣）
-  upg: { dmg: 0, rate: 0, coin: 0 },
+  upg: { rate: 0, coin: 0 },
   essence: 0,                    // 轉生精華（永久）
   rebirths: 0,
   deepest: 0,                    // 最高關卡（轉生計算用）
@@ -707,8 +712,9 @@ const state = {
   misses: 0,
   timeLeft: 0,
   survival: 0,
-  unlocked: 1,
+  unlocked: WEAPONS.length,
   weaponIndex: 0,
+  wlv: [0, 0, 0],          // 三把重型武器各自的等級（無上限）
   cool: 0,
   shake: 0,
   pointer: { x: -1, y: -1, down: false },
@@ -759,8 +765,13 @@ const I18N = {
     rebirthInfo: 'Essence {e} · Rebirths {n} · Next +{g}',
     rebirthLocked: 'Reach level 20 or 30,000 pts to rebirth',
     rebirthDone: 'Rebirth! +{g} essence (damage & points +{g}%)',
+    dmgMul: 'dmg x{x}',
+    wUpBought: '{name} Lv {lv}',
+    highestLevel: 'Cleared: {n}',
+    loopLabel: 'Loop {n}',
+    nextSub: 'Endless levels',
     gameTitle: 'Fly Swatter',
-    tagline: '20 weapons · 100 levels · Endless mode',
+    tagline: '3 heavy weapons · infinite levels · rebirth',
     levelShort: 'Level {n}',
     goalScore: '{a} / {b} pts',
     goalKills: '{a} / {b} flies',
@@ -894,8 +905,13 @@ const I18N = {
     rebirthInfo: '精華 {e} · 已轉生 {n} 次 · 這次可得 +{g}',
     rebirthLocked: '打到第 20 關或 30,000 分才能轉生',
     rebirthDone: '轉生完成，精華 +{g}（傷害與點數 +{g}%）',
+    dmgMul: '傷害 ×{x}',
+    wUpBought: '{name} 升到 Lv {lv}',
+    highestLevel: '已通關 {n} 關',
+    loopLabel: '第 {n} 輪',
+    nextSub: '無限關卡，越後面越硬',
     gameTitle: 'Fly Swatter',
-    tagline: '20 把武器 · 100 個關卡 · 無盡模式',
+    tagline: '3 把重型武器 · 無限關卡 · 轉生',
     levelShort: '第 {n} 關',
     goalScore: '{a} / {b} 分',
     goalKills: '{a} / {b} 隻',
@@ -1041,14 +1057,14 @@ function t(key, vars) {
 function wName(w) { return I18N[LANG].weaponNames[w.id] || w.name; }
 function wShort(w) { return I18N[LANG].weaponShorts[w.id] || w.short; }
 function lvName(n) {
-  const L = LEVELS[n];
+  const L = levelCfg(n);
   if (!L) return '';
   const sc = sceneFor(n);
   return LANG === 'zh' ? sc.name : sc.name_en;
 }
 function lvTip(n) {
   if (n === 'endless') return LANG === 'zh' ? ENDLESS_CFG.tip : ENDLESS_CFG.tip_en;
-  const L = LEVELS[n];
+  const L = levelCfg(n);
   if (!L) return '';
   return LANG === 'zh' ? L.tip : L.tip_en;
 }
@@ -1449,11 +1465,7 @@ function loadScore() {
 function saveScore() {
   try { localStorage.setItem(SCORE_KEY, String(state.score)); } catch (e) { /* 私密模式 */ }
 }
-function unlockedFromScore(score) {
-  let n = 1;
-  while (n < WEAPONS.length && score >= WEAPONS[n].unlock) n++;
-  return n;
-}
+function unlockedFromScore() { return WEAPONS.length; }   // 全部一開始就開
 
 function loadProgress() {
   try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); } catch (e) { return {}; }
@@ -1661,7 +1673,7 @@ function metricText(entry, type) {
   return t('secondsMs', { s: (entry.value / 1000).toFixed(1) });
 }
 function recordBest(level, entry) {
-  const cfg = LEVELS[level];
+  const cfg = levelCfg(level);
   const type = cfg ? cfg.goal.type : 'score';
   const bests = loadBests();
   const list = Array.isArray(bests[level]) ? bests[level].slice() : [];
@@ -1718,9 +1730,8 @@ function saveBoard(entry) {
 const META_KEY = 'fly.swat.meta';
 
 const UPGRADES = {
-  dmg:  { base: 80,  mult: 1.30, max: 20, step: 0.15 },   // 傷害 +15%/級
-  rate: { base: 100, mult: 1.32, max: 15, step: 0.06 },   // 自動間隔 -6%/級
-  coin: { base: 150, mult: 1.35, max: 10, step: 0.05 },   // 得分→點數 +5%/級
+  rate: { base: 120, mult: 1.30, max: 20, step: 0.05 },   // 自動間隔 -5%/級
+  coin: { base: 150, mult: 1.32, max: 15, step: 0.05 },   // 得分→點數 +5%/級
 };
 
 function loadMeta() {
@@ -1733,23 +1744,24 @@ function loadMeta() {
     state.auto = m.auto !== false;
     const u = m.upg || {};
     state.upg = {
-      dmg: clamp(u.dmg | 0, 0, UPGRADES.dmg.max),
       rate: clamp(u.rate | 0, 0, UPGRADES.rate.max),
       coin: clamp(u.coin | 0, 0, UPGRADES.coin.max),
     };
+    const w = Array.isArray(m.wlv) ? m.wlv : [];
+    state.wlv = WEAPONS.map((_, i) => Math.max(0, Math.min(WLV_MAX, w[i] | 0)));
   } catch (e) { /* 私密模式 */ }
 }
 
 function saveMeta() {
   try {
     localStorage.setItem(META_KEY, JSON.stringify({
-      bank: Math.round(state.bank), upg: state.upg, essence: state.essence,
+      bank: Math.round(state.bank), upg: state.upg, wlv: state.wlv, essence: state.essence,
       rebirths: state.rebirths, deepest: state.deepest, auto: state.auto,
     }));
   } catch (e) { /* ignore */ }
 }
 
-function dmgMult() { return 1 + UPGRADES.dmg.step * state.upg.dmg + 0.01 * state.essence; }
+function dmgMult() { return 1 + 0.01 * state.essence; }   // 武器傷害另外由等級成長
 function coinRate() { return 0.2 + UPGRADES.coin.step * state.upg.coin + 0.01 * state.essence; }
 function autoInterval() { return Math.max(0.4, 1.25 * (1 - UPGRADES.rate.step * state.upg.rate)); }
 function upgCost(k) { const u = UPGRADES[k]; return Math.round(u.base * Math.pow(u.mult, state.upg[k])); }
@@ -1765,6 +1777,22 @@ function buyUpgrade(k) {
   saveMeta();
   if (typeof Sfx !== 'undefined' && Sfx.upgrade) Sfx.upgrade();
   showToast(t('upgBought', { name: t('upg_' + k), lv: state.upg[k] }));
+  renderShop();
+  updateHud(true);
+  return true;
+}
+
+function buyWeaponUpgrade(i) {
+  if (i < 0 || i >= WEAPONS.length) return false;
+  if (weaponLv(i) >= WLV_MAX) { showToast(t('upgMax')); return false; }
+  const cost = wCost(i);
+  if (state.bank < cost) { showToast(t('upgPoor', { n: cost - Math.floor(state.bank) })); return false; }
+  state.bank -= cost;
+  state.wlv[i] = weaponLv(i) + 1;
+  saveMeta();
+  if (typeof Sfx !== 'undefined' && Sfx.upgrade) Sfx.upgrade();
+  showToast(t('wUpBought', { name: wName(WEAPONS[i]), lv: state.wlv[i] }));
+  if (i === state.weaponIndex) updateWeaponChip();
   renderShop();
   updateHud(true);
   return true;
@@ -1798,12 +1826,13 @@ function doRebirth() {
   state.essence += gain;
   state.rebirths++;
   state.bank = 0;
-  state.upg = { dmg: 0, rate: 0, coin: 0 };
+  state.upg = { rate: 0, coin: 0 };
+  state.wlv = WEAPONS.map(() => Math.round(state.essence / 25));   // 精華換起始武器等級
   state.score = 0;
   state.deepest = 0;
   state.level = 1;
-  state.unlocked = clamp(1 + Math.floor(state.essence / 10), 1, 5);
-  state.weaponIndex = state.unlocked - 1;
+  state.unlocked = WEAPONS.length;
+  state.weaponIndex = 0;
   try { localStorage.removeItem(PROGRESS_KEY); } catch (e) { /* ignore */ }
   saveScore();
   saveMeta();
@@ -1827,10 +1856,17 @@ function armRebirth(btn) {
 }
 
 function shopHtml() {
-  const rows = ['dmg', 'rate', 'coin'].map((k) => {
+  const rows = WEAPONS.map((w, i) => {
+    const lv = weaponLv(i), cost = wCost(i), afford = state.bank >= cost;
+    return `<button class="shopBtn w${afford ? '' : ' poor'}" data-wup="${i}">`
+      + `<b>${w.icon} ${LANG === 'zh' ? w.name : w.short}</b>`
+      + `<small>Lv ${lv} · ${t('dmgMul', { x: weaponDmgMul(i).toFixed(1) })}</small>`
+      + `<span>💎 ${cost}</span></button>`;
+  }).join('');
+  const grows = ['rate', 'coin'].map((k) => {
     const u = UPGRADES[k], lv = state.upg[k], maxed = lv >= u.max;
     const cost = upgCost(k), afford = !maxed && state.bank >= cost;
-    return `<button class="shopBtn${maxed ? ' max' : ''}${afford || maxed ? '' : ' poor'}" data-upg="${k}" ${maxed ? 'disabled' : ''}>`
+    return `<button class="shopBtn g${maxed ? ' max' : ''}${afford || maxed ? '' : ' poor'}" data-upg="${k}" ${maxed ? 'disabled' : ''}>`
       + `<b>${t('upg_' + k)}</b><small>Lv ${lv}/${u.max}</small>`
       + `<span>${maxed ? t('upgMaxShort') : '💎 ' + cost}</span></button>`;
   }).join('');
@@ -1840,7 +1876,8 @@ function shopHtml() {
     : t('rebirthLocked');
   return `<div class="shop">
     <div class="shopTitle"><span>💎 ${t('shopTitle')}</span><b>${Math.floor(state.bank)}</b></div>
-    <div class="shopGrid">${rows}</div>
+    <div class="shopGrid w">${rows}</div>
+    <div class="shopGrid g">${grows}</div>
     <div class="rebirth"><span>${info}</span>
       <button id="btnRebirth" class="mini ${gain ? '' : 'poor'}" ${gain ? '' : 'disabled'}>🌀 ${t('rebirthBtn')}</button>
     </div>
@@ -1852,6 +1889,7 @@ function renderShop() {
   if (!host) return;
   host.innerHTML = shopHtml();
   host.querySelectorAll('[data-upg]').forEach((b) => { b.onclick = () => buyUpgrade(b.dataset.upg); });
+  host.querySelectorAll('[data-wup]').forEach((b) => { b.onclick = () => buyWeaponUpgrade(+b.dataset.wup); });
   const rb = document.getElementById('btnRebirth');
   if (rb) rb.onclick = () => armRebirth(rb);
 }
@@ -1891,21 +1929,28 @@ function addScore(n) {
 }
 
 function checkUnlock() {
-  let next = state.unlocked;
-  while (next < WEAPONS.length && state.score >= WEAPONS[next].unlock) next++;
-  if (next > state.unlocked) {
-    const latest = WEAPONS[next - 1];
-    state.unlocked = next;
-    state.weaponIndex = next - 1;
-    showToast(t('weaponUp', { name: wName(latest) }));
-    Sfx.upgrade();
-    state.effects.push({ type: 'flash', ttl: 0.35, t: 0, color: latest.id === 'laser' ? '#a8e6ff' : '#ffe0a8' });
-    renderWeaponBar();
-    updateWeaponChip();
-  }
+  /* 三把重型武器開局全部可用；成長改成「武器等級」而不是「解鎖新武器」 */
+  if (state.unlocked !== WEAPONS.length) { state.unlocked = WEAPONS.length; renderWeaponBar(); }
 }
 
-function currentWeapon() { return WEAPONS[state.weaponIndex]; }
+function weaponLv(i) { return state.wlv[i] || 0; }
+function weaponDmgMul(i) { return 1 + 0.3 * weaponLv(i); }
+function wCost(i) { return Math.round(80 * Math.pow(1.30, weaponLv(i)) * (1 + i * 0.9)); }
+
+function currentWeapon() {
+  const base = WEAPONS[state.weaponIndex] || WEAPONS[0];
+  const lv = weaponLv(state.weaponIndex);
+  if (!lv) return base;
+  const k = weaponDmgMul(state.weaponIndex);
+  const out = Object.assign({}, base);
+  out.lv = lv;
+  out.damage = Math.round((base.damage || 1) * k);
+  if (base.tickDamage) out.tickDamage = +(base.tickDamage * k).toFixed(2);
+  if (base.radius) out.radius = Math.round(base.radius * (1 + 0.02 * lv));
+  if (base.bossDamage) out.bossDamage = Math.round(base.bossDamage * k);
+  if (base.band) out.band = Math.round(base.band * (1 + 0.02 * lv));
+  return out;
+}
 
 function selectWeapon(i) {
   if (i >= state.unlocked || i === state.weaponIndex) return;
@@ -2527,7 +2572,7 @@ function sceneSpec(n) {
 }
 
 function sceneFor(n) {
-  const L = LEVELS[n];
+  const L = levelCfg(n);
   if (!L) return sceneSpec(n);
   if (!L.__scene) L.__scene = sceneSpec(n);
   return L.__scene;
@@ -2689,7 +2734,7 @@ function baseLiving(g, spec, w, h) {
   sell(g, w * .5, h * .82, w * .4, h * .08, 0, p.accent2);
   sell(g, w * .5, h * .815, w * .34, h * .06, 0, 'rgba(255,255,255,.10)');
   drawBulb(g, w * .5, h * .06, 6, 'rgba(255,220,140,.30)');
-  if (LEVELS[spec.n] && LEVELS[spec.n].watermelon) {
+  if (levelCfg(spec.n) && levelCfg(spec.n).watermelon) {
     const s = watermelonSpot();
     drawProp(g, 'table', s.x, h * .72, 1.05, spec);
     drawWatermelonAt(g, s.x, s.y, s.r, p);
@@ -3946,7 +3991,7 @@ function drawCroissantAt(g, x, y, r, p) {
 
 function drawStaticScene(g, spec, w, h) {
   spec.w = w; spec.h = h; spec.u = Math.min(w, h * .8);
-  const cfg = LEVELS[spec.n] || {};
+  const cfg = levelCfg(spec.n) || {};
   g.clearRect(0, 0, w, h);
   if (spec.chapter === 1) baseLiving(g, spec, w, h);
   else if (spec.chapter === 2) baseMarket(g, spec, w, h);
@@ -4176,15 +4221,15 @@ function resize() {
 }
 
 function startLevel(n, resetRun = false) {
-  if (resetRun) { state.score = 0; state.unlocked = 1; state.weaponIndex = 0; saveScore(); }
+  if (resetRun) { state.score = 0; state.unlocked = WEAPONS.length; state.weaponIndex = 0; saveScore(); }
   state.endless = false;
   state.level = n;
   state.phase = 'playing';
-  state.levelConfig = LEVELS[n];
+  state.levelConfig = levelCfg(n);
   resetRound();
   if (state.levelConfig.boss) {
     const boss = new Fly('boss', { x: W / 2, y: H * 0.33 });
-    const hp = state.levelConfig.bossHp || FLY_TYPES.boss.hp;
+    const hp = Math.round((state.levelConfig.bossHp || FLY_TYPES.boss.hp) * (state.levelConfig.hpMul || 1));
     boss.hp = hp; boss.maxHp = hp;
     state.boss = boss;
     state.flies.push(boss);
@@ -4274,6 +4319,8 @@ function spawnFly(typeHint) {
   }
   const f = new Fly(type);
   if (cfg.speedMul) { f.speed *= cfg.speedMul; f.baseSpeed = f.speed; }
+  const hpMul = cfg.hpMul || 1;
+  if (hpMul > 1 && !f.friendly) { f.hp = f.maxHp = Math.max(1, Math.round(f.hp * hpMul)); }
   if (state.levelConfig.defend && !f.friendly) {
     const t = defendTarget();
     f.targetPos = { x: t.x, y: t.y, r: t.r };
@@ -4617,7 +4664,8 @@ function updateHud(force = false) {
 function updateWeaponChip() {
   const w = currentWeapon();
   dom.weaponIcon.textContent = w.icon;
-  dom.weaponName.textContent = wName(w);
+  const lv = weaponLv(state.weaponIndex);
+  dom.weaponName.textContent = wName(w) + (lv ? ' Lv' + lv : '');
 }
 
 function renderWeaponBar() {
@@ -4644,7 +4692,7 @@ function showToast(text) {
 
 function showResult(win, reason, board) {
   const cfg = state.levelConfig;
-  const last = !state.endless && state.level >= 100;
+  const last = false;   // 無限關卡：永遠有下一關（第 100 關不再是最後）
   const pb = win ? recordRun() : null;
   const stats = win
     ? `<div><span>${t('thisRun')}</span><b>${state.levelScore}</b></div>
@@ -4762,28 +4810,10 @@ function showStart() {
   if (!state.menuChapter) {
     state.menuChapter = clamp(Math.floor(maxCleared / 20) + 1, 1, CHAPTERS.length);
   }
-  const chap = clamp(state.menuChapter, 1, CHAPTERS.length);
-  state.menuChapter = chap;
-  const chapter = CHAPTERS[chap - 1];
-  let chapCleared = 0;
-  for (let i = 0; i < 20; i++) if (prog[(chap - 1) * 20 + i + 1]) chapCleared++;
-
-  const chapBtns = CHAPTERS.map((c) => {
-    const first = (c.id - 1) * 20 + 1;
-    const unlocked = levelUnlocked(first);
-    let done = 0;
-    for (let i = 0; i < 20; i++) if (prog[first + i]) done++;
-    return `<button class="chtab${c.id === chap ? ' active' : ''}" data-chap="${c.id}" ${unlocked ? '' : 'disabled'}>
-      ${LANG === 'zh' ? c.name : c.name_en}<small>${done}/20</small></button>`;
-  }).join('');
-
-  const cells = Array.from({ length: 20 }, (_, i) => {
-    const n = (chap - 1) * 20 + i + 1;
-    const unlocked = levelUnlocked(n);
-    const cleared = !!prog[n];
-    return `<button class="lvcell${unlocked ? '' : ' locked'}" data-level="${n}" ${unlocked ? '' : 'disabled'}>
-      <b>${cleared ? t('levelCleared') : (unlocked ? '▶' : t('locked'))}</b><span>${n}</span></button>`;
-  }).join('');
+  const nextN = maxCleared + 1;
+  const nextCfg = levelCfg(nextN);
+  const loop = nextCfg.loop || 1;
+  const themeName = LANG === 'zh' ? nextCfg.name : nextCfg.name_en;
 
   const board = loadBoard();
   const boardHtml = board.length
@@ -4801,13 +4831,15 @@ function showStart() {
         <button id="btnLang" class="mini">🌐 ${t('languageSwitch')}</button>
       </span>
     </div>
-    <div class="chapters">${chapBtns}</div>
-    <div class="chapterInfo"><span>${LANG === 'zh' ? chapter.name : chapter.name_en} · ${chapCleared}/20</span>
+    <div class="ladder">
+      <div class="ladTop"><span>🏁 ${t('highestLevel', { n: maxCleared })}</span><span>♾️ ${t('loopLabel', { n: loop })}</span></div>
+      <button class="lv next" id="btnNextLv"><b>▶ ${t('levelN', { n: nextN, name: lvName(nextN) })}</b><span>${t('nextSub')}</span></button>
+    </div>
+    <div class="chapterInfo"><span>${themeName}</span>
       <span class="boardBtns">
         <button id="btnBoard" class="mini">🏆 ${t('localBoard')}</button>
         ${LB.enabled ? `<button id="btnGlobal" class="mini global">🌍 ${t('globalBoard')}</button>` : ''}
       </span></div>
-    <div class="lvgrid">${cells}</div>
     <button class="lv endless${endlessUnlocked() ? '' : ' locked'}" id="btnEndlessMenu" ${endlessUnlocked() ? '' : 'disabled'}>
       <b>${endlessUnlocked() ? t('endlessCard') : t('endlessLocked')}</b><span>${t('endlessSub')}</span></button>
     ${boardHtml}
@@ -4819,6 +4851,8 @@ function showStart() {
   updateAutoBtn();
   document.getElementById('profileName').textContent = PROFILE.name;
   document.getElementById('btnStart').onclick = () => { Sfx.init(); state.menuChapter = 1; startLevel(1, true); };
+  const nextLvBtn = document.getElementById('btnNextLv');
+  if (nextLvBtn) nextLvBtn.onclick = () => { Sfx.init(); startLevel(nextN, false); };
   document.getElementById('btnEndlessMenu').onclick = () => { Sfx.init(); startEndless(); };
   document.getElementById('btnRename').onclick = () => renderRename();
   document.getElementById('btnLang').onclick = () => {
@@ -4830,17 +4864,9 @@ function showStart() {
       location.href = u.toString();     /* 用 ?lang= 指定，開機不看系統語系 */
     } catch (e) { location.reload(); }
   };
-  document.getElementById('btnBoard').onclick = () => showBoard(chap);
+  document.getElementById('btnBoard').onclick = () => showBoard(nextCfg.chapter);
   const globalBtn = document.getElementById('btnGlobal');
-  if (globalBtn) globalBtn.onclick = () => showGlobalBoard(chap);
-  dom.card.querySelectorAll('.chtab').forEach((btn) => {
-    if (btn.disabled) return;
-    btn.onclick = () => { state.menuChapter = +btn.dataset.chap; showStart(); };
-  });
-  dom.card.querySelectorAll('.lvcell[data-level]').forEach((btn) => {
-    if (btn.disabled) return;
-    btn.onclick = () => { Sfx.init(); startLevel(+btn.dataset.level, false); };
-  });
+  if (globalBtn) globalBtn.onclick = () => showGlobalBoard(nextCfg.chapter);
 }
 
 function renderRename() {
@@ -4877,7 +4903,7 @@ function showBoard(chapter) {
   const bests = loadBests();
   const rows = Array.from({ length: 20 }, (_, i) => {
     const n = (chap - 1) * 20 + i + 1;
-    const type = LEVELS[n].goal.type;
+    const type = levelCfg(n).goal.type;
     const e = (bests[n] || [])[0];
     return `<button class="brow" data-brow="${n}">
       <b>${n}</b>
@@ -4897,7 +4923,7 @@ function showBoard(chapter) {
 }
 
 function showBoardLevel(n) {
-  const type = LEVELS[n].goal.type;
+  const type = levelCfg(n).goal.type;
   const list = loadBests()[n] || [];
   const rows = list.length
     ? list.map((e, i) => `<div class="brow static">
@@ -4942,7 +4968,7 @@ function showGlobalLevel(n, revived = 0) {
   if (!LB.enabled) return;
   state.globalLevel = n;
   state.globalRevived = revived ? 1 : 0;
-  const type = LEVELS[n].goal.type;
+  const type = levelCfg(n).goal.type;
   const tab = (v, label) => `<button class="mini ${revived === v ? 'on' : ''}" data-gtab="${v}">${label}</button>`;
   dom.card.innerHTML = `
     <h2>${t('globalTitle')}</h2>
@@ -5189,8 +5215,8 @@ dom.score.innerHTML = `0<small>${t('scoreUnit')}</small>`;
 // 還原累積分數 → 依門檻回推已解鎖武器（不觸發升級 toast）
 state.score = loadScore();
 loadMeta();
-state.unlocked = Math.max(unlockedFromScore(state.score), clamp(1 + Math.floor(state.essence / 10), 1, 5));
-state.weaponIndex = state.unlocked - 1;
+state.unlocked = WEAPONS.length;   // 三把重型武器開局全開
+state.weaponIndex = 0;   // 三把都開，預設拿重錘
 renderWeaponBar();
 updateWeaponChip();
 showStart();
@@ -5206,6 +5232,8 @@ requestAnimationFrame(() => requestAnimationFrame(() => {
 window.__game = {
   get ready() { return true; },
   state, LEVELS, WEAPONS, FLY_TYPES, UPGRADES,
+  buyUpgrade, buyWeaponUpgrade, wCost, weaponLv, weaponDmgMul, currentWeapon,
+  selectWeapon, levelCfg, makeLevel, levelUnlocked,
   buyUpgrade, doRebirth, rebirthGain, toggleAuto, autoAttack, nearestEnemy,
   dmgMult, coinRate, autoInterval, upgCost, loadMeta, saveMeta,
   get flies() { return state.flies; },

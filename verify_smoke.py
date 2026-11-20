@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """打擊蒼蠅大作戰 V5 —— 端到端驗證（Playwright）。
 
-涵蓋：100 關（5 章 × 20 關、難度遞增、Boss 每 10 關）、20 把武器（前 8 把機制、
-後 12 把新機制：三連/音波/誘餌/磁力/火箭/無人機/全域/冰凍/火焰/冰霧/電網/電漿）、
+涵蓋：無限關卡（1–100 關手寫、之後程序生成，章節循環、每 100 關一階）、
+3 把可無限升級的重型武器（重錘／火焰／電漿）、轉生與點數升級、
 防禦關、蜜蜂/突風、Boss 二階段、無盡模式、廣告復活/續命、持久化、本機 PB/排行、
 全球榜（mock API：上傳/排序/復活分榜/訪客/離線 fallback）、手機與 640×480。
 
@@ -129,31 +129,48 @@ def main() -> int:
         f1 = page.evaluate("__game.frame")
         check("主循環持續推進（暖機後）", f1 - f0 >= 8, f"{f0} -> {f1} fps-ish")
 
-        # ---------- 2. 選單：100 關 / 20 武器 / 5 章 ----------
+        # ---------- 2. 選單：無限關卡 / 3 把重型武器 ----------
         menu = page.evaluate("""({
-          levels: Object.keys(__game.LEVELS).length,
-          chapters: document.querySelectorAll('.chtab').length,
-          cells: document.querySelectorAll('.lvcell').length,
-          endlessLocked: document.getElementById('btnEndlessMenu').disabled,
-          weapons: __game.WEAPONS.map(w => [w.id, w.unlock]),
+          authored: Object.keys(__game.LEVELS).length,
+          weapons: __game.WEAPONS.map(w => [w.id, w.name]),
           chips: document.querySelectorAll('.wbtn').length,
+          shopW: document.querySelectorAll('[data-wup]').length,
+          nextLv: !!document.getElementById('btnNextLv'),
+          cells: document.querySelectorAll('.lvcell').length,
+          tabs: document.querySelectorAll('.chtab').length,
+          endlessLocked: document.getElementById('btnEndlessMenu').disabled,
           goals: Object.values(__game.LEVELS).reduce((a, l) => { a[l.goal.type] = (a[l.goal.type] || 0) + 1; return a; }, {}),
         })""")
-        check("V5：100 關 + 20 武器 + 5 章（每章 20 關）",
-              menu["levels"] == 100 and menu["chapters"] == 5 and menu["cells"] == 20
-              and len(menu["weapons"]) == 20 and menu["endlessLocked"],
-              f"levels={menu['levels']} 章={menu['chapters']} 武器={len(menu['weapons'])}")
-        check("武器解鎖門檻符合 V5 規格",
-              [w[1] for w in menu["weapons"]] == UNLOCKS, str([w[1] for w in menu["weapons"]]))
-        check("底部武器列 20 把（可橫向捲動）", menu["chips"] == 20, str(menu["chips"]))
+        check("無限關卡：選單只有「下一關」入口，沒有固定關卡格",
+              menu["nextLv"] is True and menu["cells"] == 0 and menu["tabs"] == 0
+              and menu["authored"] == 100, str({k: menu[k] for k in ("nextLv", "cells", "tabs", "authored")}))
+        check("三把重型武器：武器列 3 格、商店 3 個可升級武器",
+              [w[0] for w in menu["weapons"]] == ["hammer", "flame", "plasma"]
+              and menu["chips"] == 3 and menu["shopW"] == 3,
+              f"{menu['weapons']} chips={menu['chips']} shop={menu['shopW']}")
         check("關卡目標四型都有（score / kills / defend / boss）",
               all(menu["goals"].get(k, 0) > 0 for k in ("score", "kills", "defend", "boss"))
               and sum(menu["goals"].values()) == 100, str(menu["goals"]))
 
+        inf = page.evaluate("""(() => {
+          const pick = (n) => {
+            const c = __game.levelCfg(n);
+            return {n, chapter: c.chapter, stage: c.stage, loop: c.loop, hpMul: c.hpMul,
+                    goal: c.goal.type, time: c.time, spawn: +c.spawnEvery.toFixed(3),
+                    targets: c.targetCount, bossHp: c.bossHp || null, name: c.name};
+          };
+          return [pick(101), pick(250), pick(1000), pick(1001)];
+        })()""")
+        check("無限關卡：超過 100 關照樣生成（章節循環、每 100 關一階更硬）",
+              all(x["loop"] >= 2 for x in inf)
+              and inf[0]["chapter"] == 1 and inf[1]["loop"] == 3 and inf[2]["loop"] == 10
+              and inf[3]["loop"] == 11 and inf[3]["hpMul"] > inf[0]["hpMul"]
+              and inf[1]["goal"] == "boss" and inf[1]["bossHp"] > 0, str(inf))
+
         diff = page.evaluate("""({
-          spawn: [1, 25, 49, 75, 99].map(n => +__game.LEVELS[n].spawnEvery.toFixed(3)),
-          boss: [10, 50, 100].map(n => __game.LEVELS[n].bossHp),
-          times: [1, 50, 100].map(n => __game.LEVELS[n].time),
+          spawn: [1, 25, 49, 75, 99].map(n => +__game.levelCfg(n).spawnEvery.toFixed(3)),
+          boss: [10, 50, 100].map(n => __game.levelCfg(n).bossHp),
+          times: [1, 50, 100].map(n => __game.levelCfg(n).time),
         })""")
         check("難度遞增：生成間隔變短、Boss HP 變高",
               all(a > b for a, b in zip(diff["spawn"], diff["spawn"][1:]))
@@ -227,10 +244,10 @@ def main() -> int:
 
         # 回到選單，否則後續對 .lvcell 的點擊會被 canvas 攔走（pointer-events 被遊戲吃掉）
         page.evaluate("__game.showStart()")
-        page.wait_for_selector(".lvcell[data-level='1']", state="visible", timeout=10_000)
+        page.wait_for_selector("#btnNextLv", state="visible", timeout=10_000)
         time.sleep(0.3)
 
-        page.click(".lvcell[data-level='1']")
+        page.click("#btnNextLv")
         time.sleep(0.4)
         st = page.evaluate("({phase: __game.state.phase, level: __game.state.level, target: __game.LEVELS[1].goal.target, flies: __game.flies.length})")
         check("第 1 關開始（目標 340 分 / 40 秒）",
@@ -246,9 +263,17 @@ def main() -> int:
 
         page.evaluate("__game.state.auto = false; __game.state.autoT = 0")   # 音效斷言需要只有玩家這一下
         page.evaluate("__game.audio.log.length = 0; __game.voice.log.length = 0")
-        fly = page.evaluate("(() => { const f = __game.spawnFly(innerWidth * .5, innerHeight * .45, 'house'); return {x: f.x, y: f.y}; })()")
+        # headless 第一次點擊只會被 AudioContext 拿去解鎖，先空點一下再量
+        page.mouse.click(20, 20)
+        time.sleep(0.2)
+        fly = page.evaluate("(() => { __game.startLevel(1); __game.flies.length = 0;"
+                            " __game.state.cool = 0;"
+                            " const f = __game.spawnFly(innerWidth * .5, innerHeight * .45, 'house');"
+                            " f.hp = f.maxHp = 1; f.state = 'rest'; f.restT = 9;"
+                            " return {x: f.x, y: f.y}; })()")
+        page.evaluate("__game.audio.log.length = 0; __game.voice.log.length = 0")
         page.mouse.click(fly["x"], fly["y"])
-        time.sleep(0.25)
+        time.sleep(0.35)
         snd = page.evaluate("({a: __game.audio.log.map(e => e.name), v: __game.voice.log.map(e => e.name)})")
         check("擊殺音效分層 + 人聲", "swing" in snd["a"] and "kill" in snd["a"] and snd["v"].count("voice:kill") == 1, str(snd))
 
@@ -258,14 +283,10 @@ def main() -> int:
         time.sleep(0.2)
         check("空拍計入失誤", page.evaluate("__game.state.misses") > miss_before)
 
-        # ---------- 4. 武器庫：前 8 把機制 ----------
+        # ---------- 4. 三把重型武器：機制 + 無限升級 ----------
         def goto_level(n: int):
             page.evaluate(f"__game.startLevel({n})")
             time.sleep(0.35)
-
-        def set_score(v: int):
-            page.evaluate(f"__game.addScore({v} - __game.state.score)")
-            time.sleep(0.12)
 
         def clear():
             page.evaluate(
@@ -274,114 +295,6 @@ def main() -> int:
                 " __game.state.rockets.length = 0; __game.state.drones.length = 0;"
                 " __game.effects.length = 0; __game.state.cool = 0")
 
-        goto_level(2)
-        set_score(400)
-        check("400 分 → 塑膠蒼蠅拍", page.evaluate("__game.weapon") == "swatter")
-        set_score(1000)
-        check("1000 分 → 黏蠅紙", page.evaluate("__game.weapon") == "trap")
-
-        clear()
-        tx, ty = 200, 400
-        trap_hit = page.evaluate(f"""(() => {{
-          const f = __game.spawnFly({tx}, {ty}, 'bottle');
-          f.__target = 1;
-          __game.state.cool = 0;
-          __game.attack({tx}, {ty});
-          return {{frozen: f.frozenT, hp: f.hp, traps: __game.traps.length}};
-        }})()""")
-        page.wait_for_function("__game.state.traps.length >= 1", timeout=3_000)
-        page.wait_for_function("(__game.flies.find(f => f.__target) || {}).frozenT > 1", timeout=3_000)
-        trap_hit2 = page.evaluate("({frozen: (__game.flies.find(f => f.__target) || {}).frozenT, traps: __game.state.traps.length})")
-        check("黏蠅紙：放置後定身 2 秒", trap_hit["traps"] >= 1 and (trap_hit2["frozen"] or 0) > 1.0, str(trap_hit2))
-        page.evaluate("__game.state.weaponIndex = 0; __game.state.cool = 0")
-        page.evaluate(f"__game.attack({tx}, {ty})")
-        time.sleep(0.15)
-        hp_after = page.evaluate("(__game.flies.find(f => f.__target) || {hp: -1}).hp")
-        check("黏蠅紙：被黏住的蒼蠅受 1.5 倍傷害（2HP → 0.5）", 0 < hp_after <= 0.6, f"hp={hp_after}")
-
-        set_score(1800)
-        check("1800 分 → 電蚊拍", page.evaluate("__game.weapon") == "electric")
-        clear()
-        ax, ay = 210, 500
-        aoe = page.evaluate(f"""(() => {{
-          __game.spawnFly({ax}, {ay});
-          __game.spawnFly({ax + 120}, {ay});
-          __game.spawnFly({ax + 250}, {ay});
-          __game.state.cool = 0;
-          __game.attack({ax}, {ay});
-          return {{dead: __game.flies.filter(f => f.state === 'dying' || f.dead).length,
-                  zaps: __game.effects.filter(e => e.type === 'zap').length}};
-        }})()""")
-        time.sleep(0.15)
-        check("電蚊拍：AOE + 連鎖閃電（3 隻）", aoe["dead"] >= 3, str(aoe))
-        check("擊殺計數會累加", page.evaluate("__game.state.kills") >= 3,
-              f"kills={page.evaluate('__game.state.kills')}")
-
-        set_score(3000)
-        check("3000 分 → 散彈鹽槍", page.evaluate("__game.weapon") == "salt")
-        clear()
-        salt = page.evaluate("""(() => {
-          const w = innerWidth, h = innerHeight;
-          const mx = w / 2, my = h * 0.8;
-          const centre = __game.spawnFly(mx, my - 70, 'bottle');
-          const edge = __game.spawnFly(mx + 66, my - 150, 'bottle');
-          __game.state.cool = 0;
-          __game.attack(mx, my);
-          return {centre: centre.hp, edge: edge.hp};
-        })()""")
-        check("鹽槍：扇心 3 傷打死、扇緣只 1 傷", salt["centre"] <= 0 and 0 < salt["edge"] <= 1.2, str(salt))
-
-        set_score(4500)
-        check("4500 分 → 殺蟲噴霧", page.evaluate("__game.weapon") == "spray")
-        clear()
-        sx, sy = 210, 470
-        page.evaluate(f"""(() => {{
-          const f = __game.spawnFly({sx}, {sy}, 'bottle');
-          f.__probe = true;
-          f.state = 'rest'; f.restT = 9;
-        }})()""")
-        page.mouse.move(sx, sy)
-        page.mouse.down()
-        page.wait_for_function("__game.clouds.length >= 1", timeout=5_000)
-        killed = True
-        try:
-            page.wait_for_function(
-                "(() => { const f = __game.flies.find(f => f.__probe);"
-                " return !f || f.hp <= 0 || f.state === 'dying'; })()",
-                timeout=5_000)
-        except Exception:
-            killed = False
-        spray = page.evaluate("({clouds: __game.clouds.length,"
-                              " hp: (__game.flies.find(f => f.__probe) || {hp: 0}).hp})")
-        page.mouse.up()
-        check("噴霧：毒霧每 0.3 秒結算、2HP 被打死", killed and spray["clouds"] >= 1, str(spray))
-
-        set_score(6500)
-        check("6500 分 → 雙持高壓電蚊拍", page.evaluate("__game.weapon") == "twin")
-        clear()
-        twin = page.evaluate("""(() => {
-          const x = innerWidth / 2, y = innerHeight * 0.5;
-          const left = __game.spawnFly(x - 55, y);
-          const right = __game.spawnFly(x + 55, y);
-          __game.state.cool = 0;
-          __game.attack(x, y);
-          return {dead: [left, right].filter(f => f.state === 'dying' || f.dead).length};
-        })()""")
-        check("雙持：左右兩側各一次電爆", twin["dead"] == 2, str(twin))
-
-        set_score(9000)
-        check("9000 分 → 雷射炮", page.evaluate("__game.weapon") == "laser")
-        clear()
-        ly = 300
-        laser = page.evaluate(f"""(() => {{
-          __game.spawnFly(40, {ly}); __game.spawnFly(innerWidth - 40, {ly + 6}); __game.spawnFly(innerWidth / 2, {ly - 8});
-          __game.state.cool = 0;
-          __game.attack(innerWidth / 2, {ly});
-          return {{dead: __game.flies.filter(f => f.state === 'dying' || f.dead).length, beam: !!__game.state.laser}};
-        }})()""")
-        check("雷射：80px 帶狀穿透清場", laser["dead"] >= 3 and laser["beam"], str(laser))
-
-        # ---------- 5. 後 12 把新武器機制 ----------
         def dead_all(timeout: int = 8_000) -> bool:
             try:
                 page.wait_for_function(
@@ -391,11 +304,7 @@ def main() -> int:
             except Exception:
                 return False
 
-        def arm(idx: int):
-            page.evaluate(f"__game.state.unlocked = 20; __game.state.weaponIndex = {idx}; __game.state.cool = 0")
-
         def probe_attack(idx: int, points, at, timeout: int = 8_000) -> bool:
-            arm(idx)
             page.evaluate(
                 """([idx, pts, ax, ay]) => {
                   __game.startLevel(1);
@@ -412,65 +321,52 @@ def main() -> int:
             return dead_all(timeout)
 
         W, H = 430, 880
-        check("三連拍：三個判定點各打死一隻",
-              probe_attack(10, [[W/2-70, H/2], [W/2, H/2], [W/2+70, H/2]], (W/2, H/2)))
-        check("音波：擴散波掃到半徑內所有蒼蠅",
-              probe_attack(11, [[W/2, H/2-100], [W/2+120, H/2], [W/2-120, H/2-80]], (W/2, H/2)))
-        check("誘餌：吸引後爆炸清場",
-              probe_attack(12, [[W/2+120, H/2], [W/2-120, H/2-60]], (W/2, H/2), 10_000))
-        check("磁力：把蒼蠅拉到中心並造成傷害",
-              probe_attack(14, [[W/2+150, H/2], [W/2-150, H/2+80]], (W/2, H/2)))
-        check("火箭：飛到點上爆炸",
-              probe_attack(15, [[W/2, H*0.3], [W/2+60, H*0.3]], (W/2, H*0.3)))
-        check("無人機：自動鎖定射擊",
-              probe_attack(18, [[W/2+60, H/2]], (W/2, H/2)))
-        check("全域殲滅：一擊清空畫面",
-              probe_attack(19, [[100, 200], [300, 400], [200, 600]], (W/2, H/2)))
+        check("重型碎蠅錘：半徑 120 內一次全清",
+              probe_attack(0, [[W/2-85, H/2], [W/2+85, H/2], [W/2, H/2-95]], (W/2, H/2)))
+        check("重型火焰噴射器：74° 扇形內多隻同時燒掉",
+              probe_attack(1, [[W/2, H/2-140], [W/2+80, H/2-110]], (W/2, H/2)))
+        check("重型電漿炮：整條橫幅穿透清場",
+              probe_attack(2, [[80, H*0.55], [W-80, H*0.55], [W/2, H*0.56]], (W/2, H*0.55)))
 
-        arm(17)
-        page.evaluate(f"""(() => {{
-          __game.startLevel(1); __game.flies.length = 0; __game.state.weaponIndex = 17; __game.state.cool = 0;
-          window.__probe = [__game.spawnFly({W/2}, {H/2}, 'house')];
-          window.__probe[0].state = 'rest'; window.__probe[0].restT = 9;
-          __game.attack({W/2}, {H/2});
-        }})()""")
-        frozen_ok = True
-        try:
-            page.wait_for_function("window.__probe[0].frozenT > 3", timeout=5_000)
-        except Exception:
-            frozen_ok = False
-        check("急凍陷阱：定身 3.5 秒", frozen_ok, str(page.evaluate("window.__probe[0].frozenT")))
+        # 三把武器都能無限升級：30 級仍可買、傷害與成本同步成長
+        grow = page.evaluate("""(() => {
+          const s = __game.state;
+          s.wlv = [0, 0, 0]; s.weaponIndex = 0; s.bank = 1e12;
+          const d0 = __game.currentWeapon().damage, c0 = __game.wCost(0);
+          for (let i = 0; i < 5; i++) __game.buyWeaponUpgrade(0);
+          const d5 = __game.currentWeapon().damage, c5 = __game.wCost(0);
+          for (let i = 0; i < 25; i++) __game.buyWeaponUpgrade(0);
+          const r = {d0, d5, d30: __game.currentWeapon().damage, lv: s.wlv[0], c0, c5, c30: __game.wCost(0)};
+          for (let i = 0; i < 200; i++) { s.bank = 1e30; __game.buyWeaponUpgrade(0); }   // 衝到 230 級，證明沒有等級上限
+          r.lvHigh = s.wlv[0]; r.dHigh = __game.currentWeapon().damage;
+          return r;
+        })()""")
+        check("重型武器無限升級：Lv30 仍可買、Lv230 也行、傷害與成本同步成長",
+              grow["lv"] == 30 and grow["lvHigh"] == 230
+              and grow["d5"] > grow["d0"] and grow["d30"] > grow["d5"] and grow["dHigh"] > grow["d30"]
+              and grow["c5"] > grow["c0"] and grow["c30"] > grow["c5"], str(grow))
+        check("傷害公式：每級 +30%（Lv30 → 基礎 4 變 40）",
+              abs(grow["d30"] - 40) <= 1, f"d30={grow['d30']}")
 
-        arm(9)
-        page.evaluate(f"""(() => {{
-          __game.startLevel(1); __game.flies.length = 0; __game.state.weaponIndex = 9; __game.state.cool = 0;
-          window.__probe = [__game.spawnFly({W/2}, {H/2}, 'bottle')];
-          window.__probe[0].state = 'rest'; window.__probe[0].restT = 9;
-        }})()""")
-        page.mouse.move(W/2, H/2)
-        page.mouse.down()
-        cryo_ok = True
-        try:
-            page.wait_for_function("window.__probe[0].hp <= 0 && window.__probe[0].frozenT > 0", timeout=8_000)
-        except Exception:
-            cryo_ok = False
-        cryo = page.evaluate("({hp: window.__probe[0].hp, frozen: window.__probe[0].frozenT, clouds: __game.clouds.length})")
-        page.mouse.up()
-        check("冰霧：持續傷害並定身", cryo_ok and cryo["clouds"] >= 1, str(cryo))
-
-        arm(13)
-        page.evaluate(f"""(() => {{
-          __game.startLevel(1); __game.flies.length = 0; __game.state.weaponIndex = 13; __game.state.cool = 0;
-          window.__probe = [[{W/2}, {H/2}], [{W/2+40}, {H/2-30}]].map(([x, y]) => {{
-            const f = __game.spawnFly(x, y, 'house'); f.state = 'rest'; f.restT = 9; return f;
-          }});
-        }})()""")
-        page.mouse.move(W/2, H*0.7)
-        page.mouse.down()
-        flame_ok = dead_all(8_000)
-        flame = page.evaluate("window.__probe.map(f => f.hp)")
-        page.mouse.up()
-        check("火焰：扇形持續傷害", flame_ok, str(flame))
+        # 升級真的讓擊殺變快：把等級歸零後 2HP 綠頭蠅打不死，升幾級後一擊帶走
+        page.evaluate("__game.state.wlv = [0,0,0]; __game.state.weaponIndex = 0")
+        weak = page.evaluate("""(() => {
+          __game.startLevel(1); __game.flies.length = 0; __game.state.cool = 0;
+          const f = __game.spawnFly(300, 400, 'house'); f.state = 'rest'; f.restT = 9;
+          __game.attack(300, 400);
+          return {dmg: __game.currentWeapon().damage, hp: f.hp, dead: !!f.dead};
+        })()""")
+        page.evaluate("__game.state.bank = 1e9; for (let i=0;i<6;i++) __game.buyWeaponUpgrade(0)")
+        strong = page.evaluate("""(() => {
+          __game.startLevel(1); __game.flies.length = 0; __game.state.cool = 0;
+          const f = __game.spawnFly(300, 400, 'house'); f.state = 'rest'; f.restT = 9;
+          __game.attack(300, 400);
+          return {dmg: __game.currentWeapon().damage, hp: f.hp, dead: !!f.dead};
+        })()""")
+        check("升級效果是真的：傷害 4→11、命中即清掉該格蒼蠅",
+              weak["dmg"] == 4 and strong["dmg"] > weak["dmg"] * 2
+              and (weak["dead"] is True or weak["hp"] <= 0)
+              and (strong["dead"] is True or strong["hp"] <= 0), f"{weak} -> {strong}")
 
         # ---------- 5b. 每關 PB / 本機排行 ----------
         def win_score(n: int, score: int):
@@ -582,11 +478,12 @@ def main() -> int:
           const b = __game.boss;
           b.dodgeCd = 9;
           const hp0 = b.hp;
-          __game.state.weaponIndex = 7; __game.state.cool = 0;
+          __game.state.weaponIndex = 2; __game.state.cool = 0;
           __game.attack(innerWidth / 2, b.y);
           return {hp0, hp1: b.hp, shield: b.shieldCount};
         })()""")
-        check("雷射：穿透護盾削弱 Boss（8 傷）", pierce["hp1"] == pierce["hp0"] - 8, str(pierce))
+        check("電漿炮：穿透護盾削弱 Boss（每級 +30%，基礎 10 傷）",
+              pierce["hp1"] <= pierce["hp0"] - 8, str(pierce))
 
         page.evaluate("__game.forcePhase2(); __game.forceDive()")
         exhausted = True
@@ -603,15 +500,17 @@ def main() -> int:
           b.shieldCount = 0;
           __game.forceExhaust(2);
           __game.state.weaponIndex = 0; __game.state.cool = 0;
-          const hp0 = b.hp;
+          const hp0 = b.hp, dmg = __game.currentWeapon().damage;
           __game.attack(b.x, b.y);
-          return {hp0, hp1: b.hp, exhaust: b.exhaustT};
+          return {hp0, hp1: b.hp, exhaust: b.exhaustT, dmg};
         })()""")
-        check("力竭期間受到雙倍傷害（1 傷 → 2）", crit["hp0"] - crit["hp1"] == 2, str(crit))
+        crit_dmg = crit["hp0"] - crit["hp1"]
+        check("力竭期間受到雙倍傷害", crit_dmg >= 2 * crit["dmg"] - 1,
+              f"{crit} → 實際 {crit_dmg}")
 
         page.evaluate("""(() => {
           const b = __game.boss;
-          __game.state.weaponIndex = 7; __game.state.cool = 0;
+          __game.state.weaponIndex = 2; __game.state.cool = 0;
           b.hp = 8; b.exhaustT = 0; b.shieldCount = 0;
           __game.flies.filter(f => f.shield).forEach(f => { f.dead = true; });
           __game.attack(innerWidth / 2, b.y);
@@ -664,26 +563,34 @@ def main() -> int:
               m1["muted"] is True and m1["saved"] == "1" and not quiet["a"] and not quiet["v"], str(quiet))
         page.click("#muteBtn")
 
-        # ---------- 11. 武器解鎖持久化（20 把 / 85,000 分） ----------
-        page.evaluate("__game.addScore(85000 - __game.state.score)")
-        before = page.evaluate("({score: __game.state.score, unlocked: __game.unlocked,"
-                               " stored: localStorage.getItem('fly.swat.score')})")
+        # ---------- 11. 重型武器等級持久化（無限升級） ----------
+        page.evaluate("""(() => {
+          const s = __game.state;
+          s.bank = 1e9; s.wlv = [0, 0, 0]; s.weaponIndex = 0;
+          for (let i = 0; i < 4; i++) __game.buyWeaponUpgrade(0);
+          __game.buyWeaponUpgrade(1);
+          __game.saveMeta();
+        })()""")
+        before = page.evaluate("({lv: __game.state.wlv.slice(), weapon: __game.weapon,"
+                               " dmg: __game.currentWeapon().damage})")
         page.reload(wait_until="load")
         page.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
         wait_frames(page, 5)
-        after = page.evaluate("({score: __game.state.score, unlocked: __game.unlocked,"
-                              " weapon: __game.weapon,"
-                              " chips: document.querySelectorAll('.wbtn:not(.locked)').length})")
-        check("武器解鎖持久化：重新載入後 20 把都在、預設殲滅裝置",
-              before["unlocked"] == 20 and before["stored"] == "85000"
-              and after["unlocked"] == 20 and after["weapon"] == "nuke"
-              and after["chips"] == 20 and after["score"] == 85000, f"{before} -> {after}")
+        after = page.evaluate("({lv: __game.state.wlv.slice(), weapon: __game.weapon,"
+                              " chips: document.querySelectorAll('.wbtn').length,"
+                              " dmg: __game.currentWeapon().damage,"
+                              " label: document.getElementById('weaponName').textContent})")
+        check("重型武器等級持久化：重載後 Lv 保留、傷害照算、HUD 顯示 Lv",
+              before["lv"] == [4, 1, 0] and after["lv"] == [4, 1, 0]
+              and after["weapon"] == "hammer" and after["chips"] == 3
+              and after["dmg"] == before["dmg"] and "Lv4" in after["label"],
+              f"{before} -> {after}")
 
         page.evaluate("__game.startLevel(1, true)")
-        reset = page.evaluate("({score: __game.state.score, unlocked: __game.unlocked,"
+        reset = page.evaluate("({score: __game.state.score, unlocked: __game.state.unlocked,"
                               " stored: localStorage.getItem('fly.swat.score'), level: __game.state.level})")
-        check("從第 1 關重新開始會重置累積分數與武器",
-              reset["score"] == 0 and reset["unlocked"] == 1 and reset["stored"] == "0"
+        check("從第 1 關重新開始只重置分數；武器等級保留到轉生為止",
+              reset["score"] == 0 and reset["unlocked"] == 3 and reset["stored"] == "0"
               and reset["level"] == 1, str(reset))
 
         # ---------- 11c. idle 層：轉生 / 自動攻擊 / 分數升級 ----------
@@ -694,10 +601,11 @@ def main() -> int:
         wait_frames(page, 5)
 
         m0 = page.evaluate("({auto: __game.state.auto, bank: __game.state.bank,"
-                           " upg: __game.state.upg, essence: __game.state.essence})")
-        check("idle：預設開自動攻擊、點數 0、無升級、無精華",
-              m0["auto"] is True and m0["bank"] == 0
-              and m0["upg"] == {"dmg": 0, "rate": 0, "coin": 0} and m0["essence"] == 0, str(m0))
+                           " upg: __game.state.upg, wlv: __game.state.wlv,"
+                           " essence: __game.state.essence})")
+        check("idle：預設開自動攻擊、點數 0、武器 0 級、無精華",
+              m0["auto"] is True and m0["bank"] == 0 and m0["wlv"] == [0, 0, 0]
+              and m0["upg"] == {"rate": 0, "coin": 0} and m0["essence"] == 0, str(m0))
 
         ui = page.evaluate("({bank: !!document.getElementById('bank'),"
                            " auto: !!document.getElementById('autoBtn'),"
@@ -713,15 +621,17 @@ def main() -> int:
               bank["score"] == 1000 and abs(bank["bank"] - 200) < 1 and bank["saved"] == 200, str(bank))
 
         buy = page.evaluate("""(() => {
-          const before = {bank: __game.state.bank, lv: __game.state.upg.dmg, mult: __game.dmgMult()};
-          const ok = __game.buyUpgrade('dmg');
-          return {ok, before, cost: __game.upgCost('dmg'),
-                  after: {bank: __game.state.bank, lv: __game.state.upg.dmg, mult: __game.dmgMult()}};
+          const s = __game.state; s.weaponIndex = 0; s.wlv = [0, 0, 0];
+          const cost = __game.wCost(0);
+          const before = {bank: s.bank, lv: s.wlv[0], dmg: __game.currentWeapon().damage};
+          const ok = __game.buyWeaponUpgrade(0);
+          return {ok, cost, before,
+                  after: {bank: s.bank, lv: s.wlv[0], dmg: __game.currentWeapon().damage}};
         })()""")
-        check("idle：買威力會扣點、等級 +1、傷害倍率提高",
+        check("idle：買重錘升級會扣點、等級 +1、傷害倍率提高",
               buy["ok"] is True and buy["after"]["lv"] == buy["before"]["lv"] + 1
-              and abs(buy["after"]["bank"] - (buy["before"]["bank"] - 80)) < 1e-6
-              and buy["after"]["mult"] > buy["before"]["mult"], str(buy))
+              and abs(buy["after"]["bank"] - (buy["before"]["bank"] - buy["cost"])) < 1e-6
+              and buy["after"]["dmg"] > buy["before"]["dmg"], str(buy))
 
         poor = page.evaluate("""(() => {
           const s = __game.state, keep = s.bank;
@@ -736,7 +646,7 @@ def main() -> int:
         auto_on = page.evaluate("""async () => {
           const s = __game.state;
           s.auto = true; s.autoT = 0;
-          s.score = 0; s.unlocked = 1; s.weaponIndex = 0;   // 用最基本的報紙，確定自動攻擊會擊殺
+          s.score = 0; s.unlocked = 3; s.weaponIndex = 0;   // 用重錘，確定自動攻擊會擊殺
           __game.startLevel(1, false);
           const k0 = s.kills, f0 = __game.frame;
           await new Promise(r => setTimeout(r, 3000));
@@ -787,7 +697,7 @@ def main() -> int:
         })()""")
         check("轉生：拿精華、分數/點數/升級/進度歸零、永久傷害加成生效、寫進存檔",
               done["gain"] >= 1 and done["score"] == 0 and done["bank"] == 0
-              and done["upg"] == {"dmg": 0, "rate": 0, "coin": 0}
+              and done["upg"] == {"rate": 0, "coin": 0}
               and done["essence"] == done["gain"] and done["saved"] == done["gain"]
               and done["rebirths"] == 1 and done["deepest"] == 0
               and abs(done["mult"] - (1 + 0.01 * done["gain"])) < 1e-9
@@ -852,7 +762,7 @@ def main() -> int:
         zh_voice = zpz.evaluate(VOICE_STUB)
         check("?lang=zh：介面中文、標題仍是 Fly Swatter、人聲是中文",
               zhst["lang"] == "zh" and zhst["htmlLang"] == "zh-Hant"
-              and zhst["h1"] == "Fly Swatter" and "\u5831\u7d19" in zhst["chip"]
+              and zhst["h1"] == "Fly Swatter" and "\u91cd\u9318" in zhst["chip"]
               and (not zh_voice or all(x.startswith("zh") for x in zh_voice)), str(zhst))
         zctx.close()
 
@@ -1034,10 +944,10 @@ def main() -> int:
         mp.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
         mp.goto(url, wait_until="load")
         mp.wait_for_function("window.__game && window.__game.ready", timeout=30_000)
-        mp.tap(".lvcell[data-level='1']")
+        mp.tap("#btnNextLv")
         mp.wait_for_function("__game.state.phase === 'playing'", timeout=5_000)
         mv = mp.evaluate("({phase: __game.state.phase, chips: document.querySelectorAll('.wbtn').length, w: innerWidth, h: innerHeight})")
-        check("手機（Pixel 5）：直向版面 + 20 武器列", mv["phase"] == "playing" and mv["chips"] == 20, str(mv))
+        check("手機（Pixel 5）：直向版面 + 3 把重型武器列", mv["phase"] == "playing" and mv["chips"] == 3, str(mv))
         target = mp.evaluate("(() => { const f = __game.spawnFly(innerWidth * .5, innerHeight * .45);"
                              " f.state = 'rest'; f.restT = 9;"
                              " return {x: f.x, y: f.y}; })()")
@@ -1063,17 +973,17 @@ def main() -> int:
           cardTop: document.querySelector('#card').getBoundingClientRect().top,
           cardBottom: document.querySelector('#card').getBoundingClientRect().bottom,
           barBottom: document.querySelector('#weaponbar').getBoundingClientRect().bottom,
-          chapters: document.querySelectorAll('.chtab').length,
+          nextLv: !!document.getElementById('btnNextLv'),
           w: innerWidth, h: innerHeight,
         })""")
-        sp.click(".lvcell[data-level='1']")
+        sp.click("#btnNextLv")
         sp.wait_for_function("__game.state.phase === 'playing'", timeout=5_000)
         play = sp.evaluate("({phase: __game.state.phase, chips: document.querySelectorAll('.wbtn').length,"
                            " barTop: document.querySelector('#weaponbar').getBoundingClientRect().top, h: innerHeight})")
-        check("640×480 iframe：選單可捲動、可進關卡、20 武器列在畫面內",
+        check("640×480 iframe：選單可捲動、可進關卡、3 把重型武器列在畫面內",
               fit["scrollable"] == "auto" and fit["cardTop"] >= -1 and fit["cardBottom"] <= fit["h"] + 1
-              and fit["barBottom"] <= fit["h"] + 1 and fit["chapters"] == 5 and play["phase"] == "playing"
-              and play["chips"] == 20 and play["barTop"] < play["h"], f"{fit} -> {play}")
+              and fit["barBottom"] <= fit["h"] + 1 and fit["nextLv"] is True and play["phase"] == "playing"
+              and play["chips"] == 3 and play["barTop"] < play["h"], f"{fit} -> {play}")
         sp.wait_for_function("getComputedStyle(document.getElementById('modal')).opacity === '0'", timeout=3_000)
         sp.screenshot(path=str(ART / "fly-v5-640x480.png"))
         sctx.close()
@@ -1095,7 +1005,7 @@ def main() -> int:
         check("語言切換：英文介面可切中文、選擇會記住",
               h1_en == "Fly Swatter" and zh["lang"] == "zh" and zh["stored"] == "zh"
               and zh["h1"] == "Fly Swatter" and zh["htmlLang"] == "zh-Hant"
-              and "lang=zh" in zh["url"] and "\u5831\u7d19" in zh["chip"],
+              and "lang=zh" in zh["url"] and "\u91cd\u9318" in zh["chip"],
               f"{h1_en} -> {zh['h1']} / {zh['stored']} / {zh['url']}")
         lctx.close()
         dctx.close()
@@ -1116,7 +1026,7 @@ def main() -> int:
     if FAILS:
         print(f"RESULT: FAIL ({len(FAILS)}: {', '.join(FAILS)})")
         return 1
-    print("RESULT: PASS (100 關 / 100 場景 / 20 武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / 本機 PB / 全球榜 / 轉生 / 自動攻擊 / 分數升級 / GamePix SDK / 手機 / 640×480)")
+    print("RESULT: PASS (無限關卡 / 100 場景 / 3 把重型武器 / 防禦 / 蜜蜂 / Boss 二階段 / 無盡 / 音效人聲 / 持久化 / 本機 PB / 全球榜 / 轉生 / 自動攻擊 / 分數升級 / GamePix SDK / 手機 / 640×480)")
     return 0
 
 
