@@ -263,11 +263,12 @@ def main() -> int:
 
         page.evaluate("__game.state.auto = false; __game.state.autoT = 0")   # 音效斷言需要只有玩家這一下
         page.evaluate("__game.audio.log.length = 0; __game.voice.log.length = 0")
-        # headless 第一次點擊只會被 AudioContext 拿去解鎖，先空點一下再量
+        # headless 第一次點擊只會被 AudioContext 拿去解鎖 → 先清場再空點，避免那一下順手打死蒼蠅
+        page.evaluate("__game.startLevel(1); __game.flies.length = 0; __game.state.cool = 0")
         page.mouse.click(20, 20)
         time.sleep(0.2)
-        fly = page.evaluate("(() => { __game.startLevel(1); __game.flies.length = 0;"
-                            " __game.state.cool = 0;"
+        fly = page.evaluate("(() => { __game.flies.length = 0; __game.state.cool = 0;"
+                            " __game.voice.lastKillAt = 0;   /* 擊殺人聲有 320ms 最小間隔 */"
                             " const f = __game.spawnFly(innerWidth * .5, innerHeight * .45, 'house');"
                             " f.hp = f.maxHp = 1; f.state = 'rest'; f.restT = 9;"
                             " return {x: f.x, y: f.y}; })()")
